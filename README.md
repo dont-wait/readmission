@@ -77,3 +77,63 @@ Sau khi da train model:
 ```powershell
 python -m src.predict_xgboost --input data/X_val.csv --output reports/new_predictions.csv
 ```
+
+## Chay FastAPI server
+
+Server mac dinh dung model tot nhat tai `models/improved_best_model.joblib`.
+
+```powershell
+python -m uvicorn src.api:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Mo tai lieu API:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Kiem tra server:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/health
+```
+
+Goi du doan mot benh nhan:
+
+```powershell
+$body = @{
+  age = 70
+  bmi = 28.1
+  bnp = 456
+  sodium = 137.5
+  creatinine = 1.2
+  systolic_bp = 130
+  heart_rate = 82
+  adherence_score = 0.62
+  distance_to_hospital_km = 24.5
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/predict `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Response mau:
+
+```json
+{
+  "readmission_probability": 0.33965742588043213,
+  "predicted_label": 1,
+  "threshold": 0.3,
+  "model_path": "models\\improved_best_model.joblib"
+}
+```
+
+Neu muon dung model khac:
+
+```powershell
+$env:READMISSION_MODEL_PATH = "models/xgboost_basic.joblib"
+python -m uvicorn src.api:app --host 127.0.0.1 --port 8000
+```
