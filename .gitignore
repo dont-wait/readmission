@@ -4,3 +4,4 @@ __pycache__/
 models/
 reports/
 .pytest_cache/
+*.csv
