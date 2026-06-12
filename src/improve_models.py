@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any
 
 import joblib
-import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
@@ -12,9 +11,7 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
     precision_score,
-    precision_recall_curve,
     recall_score,
-    roc_curve,
     roc_auc_score,
 )
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
@@ -22,6 +19,11 @@ from xgboost import XGBClassifier
 
 from src.config import load_config
 from src.data import load_train_validation_data
+from src.visualization.plots import (
+    format_metric_value,
+    save_improvement_plots,
+    save_key_metrics_plot,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -191,217 +193,88 @@ def evaluate_model(
     return row, threshold_frame, probabilities
 
 
-def save_confusion_matrix_plot(
-    y_true: pd.Series,
-    y_probability: pd.Series,
-    threshold: float,
-    output_path: Path,
-) -> None:
-    y_pred = (y_probability >= threshold).astype(int)
-    matrix = confusion_matrix(y_true, y_pred)
+def build_key_metrics_table(comparison: pd.DataFrame, best_model_name: str) -> pd.DataFrame:
+    baseline_row = comparison[comparison["model"] == "xgboost_config_original"]
+    best_row = comparison[comparison["model"] == best_model_name]
 
-    fig, ax = plt.subplots(figsize=(5, 4))
-    image = ax.imshow(matrix, cmap="Blues")
-    fig.colorbar(image, ax=ax)
-    ax.set_title(f"Best Model Confusion Matrix (threshold={threshold:.2f})")
-    ax.set_xlabel("Predicted label")
-    ax.set_ylabel("Actual label")
-    ax.set_xticks([0, 1], labels=["No", "Yes"])
-    ax.set_yticks([0, 1], labels=["No", "Yes"])
+    if baseline_row.empty or best_row.empty:
+        return pd.DataFrame()
 
-    for row in range(matrix.shape[0]):
-        for col in range(matrix.shape[1]):
-            ax.text(col, row, matrix[row, col], ha="center", va="center", color="black")
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def save_roc_curve_plot(y_true: pd.Series, y_probability: pd.Series, output_path: Path) -> None:
-    fpr, tpr, _ = roc_curve(y_true, y_probability)
-    auc_score = roc_auc_score(y_true, y_probability)
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(fpr, tpr, label=f"ROC AUC = {auc_score:.3f}")
-    ax.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Random")
-    ax.set_title("Best Model ROC Curve")
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("True Positive Rate")
-    ax.legend(loc="lower right")
-    ax.grid(alpha=0.3)
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def save_precision_recall_curve_plot(
-    y_true: pd.Series,
-    y_probability: pd.Series,
-    output_path: Path,
-) -> None:
-    precision, recall, _ = precision_recall_curve(y_true, y_probability)
-    avg_precision = average_precision_score(y_true, y_probability)
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(recall, precision, label=f"Average precision = {avg_precision:.3f}")
-    ax.set_title("Best Model Precision-Recall Curve")
-    ax.set_xlabel("Recall")
-    ax.set_ylabel("Precision")
-    ax.legend(loc="lower left")
-    ax.grid(alpha=0.3)
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def get_feature_importance(model: Any, feature_names: list[str]) -> pd.Series | None:
-    estimator = model
-    if hasattr(model, "named_steps"):
-        estimator = list(model.named_steps.values())[-1]
-
-    if hasattr(estimator, "feature_importances_"):
-        return pd.Series(estimator.feature_importances_, index=feature_names).sort_values()
-
-    if hasattr(estimator, "coef_"):
-        coefficients = abs(estimator.coef_[0])
-        return pd.Series(coefficients, index=feature_names).sort_values()
-
-    return None
-
-
-def save_feature_importance_plot(model: Any, feature_names: list[str], output_path: Path) -> None:
-    importance = get_feature_importance(model, feature_names)
-    if importance is None:
-        return
-
-    importance = importance.tail(20)
-    fig_height = max(4, len(importance) * 0.35)
-    fig, ax = plt.subplots(figsize=(8, fig_height))
-    importance.plot(kind="barh", ax=ax, color="#4C78A8")
-    ax.set_title("Best Model Feature Importance")
-    ax.set_xlabel("Importance")
-    ax.set_ylabel("Feature")
-    ax.grid(axis="x", alpha=0.3)
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def save_model_comparison_plot(comparison: pd.DataFrame, output_path: Path) -> None:
-    plot_frame = comparison.set_index("model")[
-        ["roc_auc", "average_precision", "recall_at_best_threshold", "f1_at_best_threshold"]
+    baseline = baseline_row.iloc[0]
+    best = best_row.iloc[0]
+    metric_specs = [
+        (
+            "ROC AUC",
+            "roc_auc",
+            "Cang cao cang tot. 0.5 gan nhu doan ngau nhien; tren 0.7 la kha hon.",
+            "Kha nang xep hang ca nguy co cao hon ca nguy co thap.",
+        ),
+        (
+            "Average Precision",
+            "average_precision",
+            "Cang cao cang tot. Nen doc kem precision-recall curve khi lop 1 quan trong.",
+            "Chat luong xep hang rieng cho lop tai nhap vien.",
+        ),
+        (
+            "F1 at best threshold",
+            "f1_at_best_threshold",
+            "Cang cao cang tot. Can bang giua precision va recall.",
+            "Chi so tong hop tai threshold da chon.",
+        ),
+        (
+            "Recall at best threshold",
+            "recall_at_best_threshold",
+            "Cang cao cang it bo sot ca tai nhap vien.",
+            "Ty le ca tai nhap vien that duoc phat hien.",
+        ),
+        (
+            "Precision at best threshold",
+            "precision_at_best_threshold",
+            "Cang cao cang it canh bao nham.",
+            "Trong cac ca du doan tai nhap vien, bao nhieu ca dung.",
+        ),
+        (
+            "Best threshold",
+            "best_threshold",
+            "Nguong cat xac suat thanh nhan 0/1. Khong phai tham so train.",
+            "Nguong dung de tao predicted_label.",
+        ),
+        (
+            "False negatives",
+            "fn_at_best_threshold",
+            "Cang thap cang tot, dac biet voi bai toan y te.",
+            "So ca tai nhap vien bi model bo sot.",
+        ),
+        (
+            "False positives",
+            "fp_at_best_threshold",
+            "Cang thap cang tot, nhung thuong tang khi muon recall cao.",
+            "So ca khong tai nhap vien bi canh bao nham.",
+        ),
     ]
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_frame.plot(kind="bar", ax=ax)
-    ax.set_title("Model Comparison")
-    ax.set_xlabel("Model")
-    ax.set_ylabel("Score")
-    ax.set_ylim(0, 1)
-    ax.legend(loc="lower right")
-    ax.grid(axis="y", alpha=0.3)
-    ax.tick_params(axis="x", rotation=35)
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def save_threshold_metric_plot(
-    all_thresholds: pd.DataFrame,
-    metric: str,
-    best_model_name: str,
-    output_path: Path,
-) -> None:
-    fig, ax = plt.subplots(figsize=(8, 5))
-    for model_name, model_frame in all_thresholds.groupby("model"):
-        alpha = 1.0 if model_name == best_model_name else 0.35
-        linewidth = 2.5 if model_name == best_model_name else 1.2
-        ax.plot(
-            model_frame["threshold"],
-            model_frame[metric],
-            label=model_name,
-            alpha=alpha,
-            linewidth=linewidth,
+    rows = []
+    for metric_name, column, how_to_read, meaning in metric_specs:
+        baseline_value = float(baseline[column])
+        best_value = float(best[column])
+        rows.append(
+            {
+                "metric": metric_name,
+                "original_xgboost": baseline_value,
+                "improved_xgboost": best_value,
+                "change": best_value - baseline_value,
+                "meaning": meaning,
+                "how_to_read": how_to_read,
+            }
         )
 
-    ax.set_title(f"Threshold Search ({metric})")
-    ax.set_xlabel("Threshold")
-    ax.set_ylabel(metric.upper())
-    ax.set_ylim(0, 1)
-    ax.legend(loc="best", fontsize=8)
-    ax.grid(alpha=0.3)
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def save_probability_distribution_plot(
-    y_true: pd.Series,
-    y_probability: pd.Series,
-    output_path: Path,
-) -> None:
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.hist(y_probability[y_true == 0], bins=20, alpha=0.65, label="Actual 0")
-    ax.hist(y_probability[y_true == 1], bins=20, alpha=0.65, label="Actual 1")
-    ax.set_title("Best Model Probability Distribution")
-    ax.set_xlabel("Predicted probability")
-    ax.set_ylabel("Count")
-    ax.legend(loc="upper right")
-    ax.grid(axis="y", alpha=0.3)
-
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-
-
-def save_improvement_plots(
-    comparison: pd.DataFrame,
-    all_thresholds: pd.DataFrame,
-    best_model_name: str,
-    best_model: Any,
-    best_probabilities: pd.Series,
-    best_validation_features: pd.DataFrame,
-    y_val: pd.Series,
-    threshold_metric: str,
-    best_threshold: float,
-    plot_dir: Path,
-) -> dict[str, str]:
-    plot_dir.mkdir(parents=True, exist_ok=True)
-    plot_paths = {
-        "confusion_matrix": plot_dir / "confusion_matrix.png",
-        "roc_curve": plot_dir / "roc_curve.png",
-        "precision_recall_curve": plot_dir / "precision_recall_curve.png",
-        "feature_importance": plot_dir / "feature_importance.png",
-        "model_comparison": plot_dir / "model_comparison.png",
-        "threshold_search": plot_dir / "threshold_search.png",
-        "probability_distribution": plot_dir / "probability_distribution.png",
-    }
-
-    save_confusion_matrix_plot(y_val, best_probabilities, best_threshold, plot_paths["confusion_matrix"])
-    save_roc_curve_plot(y_val, best_probabilities, plot_paths["roc_curve"])
-    save_precision_recall_curve_plot(y_val, best_probabilities, plot_paths["precision_recall_curve"])
-    save_feature_importance_plot(best_model, list(best_validation_features.columns), plot_paths["feature_importance"])
-    save_model_comparison_plot(comparison, plot_paths["model_comparison"])
-    save_threshold_metric_plot(
-        all_thresholds,
-        threshold_metric,
-        best_model_name,
-        plot_paths["threshold_search"],
-    )
-    save_probability_distribution_plot(y_val, best_probabilities, plot_paths["probability_distribution"])
-
-    return {name: str(path) for name, path in plot_paths.items() if path.exists()}
+    return pd.DataFrame(rows)
 
 
 def save_markdown_report(
     summary: dict[str, Any],
     comparison: pd.DataFrame,
+    key_metrics: pd.DataFrame,
     plot_paths: dict[str, str],
     output_path: Path,
 ) -> None:
@@ -438,6 +311,34 @@ def save_markdown_report(
         f"- Precision at best threshold: `{metrics['precision_at_best_threshold']:.4f}`",
         f"- Recall at best threshold: `{metrics['recall_at_best_threshold']:.4f}`",
         f"- F1 at best threshold: `{metrics['f1_at_best_threshold']:.4f}`",
+        "",
+        "## How To Read The Main Metrics",
+        "",
+        "- `ROC AUC`: kha nang xep hang mau duong cao hon mau am. Cang cao cang tot.",
+        "- `Average Precision`: nen doc khi lop tai nhap vien quan trong. Cang cao cang tot.",
+        "- `Recall`: kha nang bat duoc ca tai nhap vien that. Recall cao thi it bo sot.",
+        "- `Precision`: khi model canh bao tai nhap vien, ty le canh bao dung la bao nhieu.",
+        "- `F1`: can bang giua precision va recall tai threshold da chon.",
+        "- `Best threshold`: nguong cat xac suat thanh nhan 0/1, khong phai tham so train.",
+        "",
+        "## Key Metrics Table",
+        "",
+        "| metric | original_xgboost | improved_xgboost | change | how_to_read |",
+        "| --- | --- | --- | --- | --- |",
+        *[
+            "| "
+            + " | ".join(
+                [
+                    str(row["metric"]),
+                    format_metric_value(str(row["metric"]), float(row["original_xgboost"])),
+                    format_metric_value(str(row["metric"]), float(row["improved_xgboost"])),
+                    f"{float(row['change']):+.4f}",
+                    str(row["how_to_read"]),
+                ]
+            )
+            + " |"
+            for _, row in key_metrics.iterrows()
+        ],
         "",
         "## Confusion Matrix At Best Threshold",
         "",
@@ -530,13 +431,17 @@ def main() -> None:
     comparison_path = report_dir / f"{args.output_prefix}_model_comparison.csv"
     thresholds_path = report_dir / f"{args.output_prefix}_threshold_search.csv"
     predictions_path = report_dir / f"{args.output_prefix}_best_val_predictions.csv"
+    key_metrics_path = report_dir / f"{args.output_prefix}_key_metrics.csv"
     summary_path = report_dir / f"{args.output_prefix}_summary.json"
     report_path = report_dir / f"{args.output_prefix}_report.md"
     model_path = model_dir / f"{args.output_prefix}_best_model.joblib"
     plot_dir = Path(output_config.get("plot_dir", report_dir / "figures")) / args.output_prefix
+    key_metrics_plot_path = plot_dir / "key_metrics_table.png"
 
     comparison.to_csv(comparison_path, index=False)
     all_thresholds.to_csv(thresholds_path, index=False)
+    key_metrics = build_key_metrics_table(comparison, best_model_name)
+    key_metrics.to_csv(key_metrics_path, index=False)
     pd.DataFrame(
         {
             "actual": y_val,
@@ -557,6 +462,9 @@ def main() -> None:
         best_threshold=best_threshold,
         plot_dir=plot_dir,
     )
+    save_key_metrics_plot(key_metrics, key_metrics_plot_path)
+    if key_metrics_plot_path.exists():
+        plot_paths["key_metrics_table"] = str(key_metrics_plot_path)
 
     summary = {
         "scale_pos_weight": scale_pos_weight,
@@ -567,9 +475,13 @@ def main() -> None:
         "tuned_xgboost_best_cv_average_precision": float(tuned_search.best_score_),
         "tuned_xgboost_best_params": tuned_search.best_params_,
         "uses_original_filtered_features_only": True,
-        "improvement_method": "XGBoost tuned with scale_pos_weight using original filtered features only.",
+        "improvement_method": (
+            "Compare the original XGBoost config with tuned XGBoost using scale_pos_weight, "
+            "using original filtered features only."
+        ),
         "outputs": {
             "comparison": str(comparison_path),
+            "key_metrics": str(key_metrics_path),
             "thresholds": str(thresholds_path),
             "predictions": str(predictions_path),
             "summary": str(summary_path),
@@ -581,7 +493,7 @@ def main() -> None:
     with summary_path.open("w", encoding="utf-8") as file:
         json.dump(summary, file, indent=2)
 
-    save_markdown_report(summary, comparison, plot_paths, report_path)
+    save_markdown_report(summary, comparison, key_metrics, plot_paths, report_path)
 
     joblib.dump(
         {
@@ -599,6 +511,7 @@ def main() -> None:
     print(f"Best model: {best_model_name}")
     print(f"Best threshold: {best_threshold:.2f}")
     print(f"Model comparison saved to: {comparison_path}")
+    print(f"Key metrics report saved to: {key_metrics_path}")
     print(f"Threshold search saved to: {thresholds_path}")
     print(f"Best validation predictions saved to: {predictions_path}")
     print(f"Summary saved to: {summary_path}")

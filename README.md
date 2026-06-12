@@ -34,7 +34,7 @@ Tim threshold tot nhat tu file prediction da co:
 python -m src.find_best_threshold --predictions reports/xgboost_basic_val_predictions.csv
 ```
 
-Chay pipeline cai thien: so sanh XGBoost goc voi mot phuong phap cai thien duy nhat la XGBoost tuned + `scale_pos_weight`, chi dung cac dac trung that trong file sau loc:
+Chay pipeline cai thien: so sanh XGBoost goc voi XGBoost tuned + `scale_pos_weight`, chi dung cac dac trung that trong file sau loc:
 
 ```powershell
 python -m src.improve_models --config configs/xgboost_basic.yaml --n-iter 25 --cv 3
@@ -42,12 +42,13 @@ python -m src.improve_models --config configs/xgboost_basic.yaml --n-iter 25 --c
 
 Pipeline se tao:
 
-- `reports/improved_model_comparison.csv`: bang so sanh ROC AUC, Average Precision, Recall, F1
+- `reports/improved_model_comparison.csv`: bang so sanh XGBoost goc va XGBoost tuned
+- `reports/improved_key_metrics.csv`: bang cac chi so quan trong kem cach doc nhanh
 - `reports/improved_threshold_search.csv`: ket qua quet threshold cho tung model
 - `reports/improved_best_val_predictions.csv`: prediction cua model tot nhat tren validation
 - `reports/improved_summary.json`: tom tat model, threshold, tham so tuning
 - `reports/improved_report.md`: bao cao ngan gon kem bang so sanh va duong dan bieu do
-- `reports/figures/improved/`: confusion matrix, ROC curve, precision-recall curve, feature importance, threshold search
+- `reports/figures/improved/`: bang key metrics, confusion matrix, ROC curve, precision-recall curve, feature importance, threshold search
 - `models/improved_best_model.joblib`: model tot nhat kem threshold da chon
 
 ## Dung voi bo du lieu khac
