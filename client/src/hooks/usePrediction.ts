@@ -7,11 +7,11 @@ export const usePrediction = () => {
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<PredictionResponse | null>(null);
 
-    const getPrediction = async (patient: PatientFeatures, threshold?: number) => {
+    const getPrediction = async (patient: PatientFeatures, threshold?: number, model?: string) => {
         setLoading(true);
         setError(null);
         try {
-            const data = await predictionService.predict(patient, threshold);
+            const data = await predictionService.predict(patient, threshold, model);
             setResult(data);
             return data;
         } catch (err: any) {

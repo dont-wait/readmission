@@ -8,8 +8,25 @@ export interface PatientFeatures {
     creatinine: number;
     systolic_bp: number;
     heart_rate: number;
+    ace_inhibitor: number;
+    beta_blocker: number;
+    diuretic: number;
     adherence_score: number;
     distance_to_hospital_km: number;
+}
+
+export interface ModelMetrics {
+    accuracy: number;
+    roc_auc: number;
+    f1: number;
+    precision: number;
+    recall: number;
+    average_precision: number;
+    tn: number;
+    fp: number;
+    fn: number;
+    tp: number;
+    predicted_positive: number;
 }
 
 export interface PredictionResponse {
@@ -18,15 +35,18 @@ export interface PredictionResponse {
     threshold: number;
     model_id: string;
     model_path: string;
-    model_metrics: Record<string, unknown> | null;
+    model_metrics: ModelMetrics | null;
     model_metrics_path: string | null;
 }
 
 export interface HealthResponse {
     status: string;
-    model_path: string;
+    active_model_id: string;
+    active_model_path: string;
     threshold: number;
     feature_columns: string[];
+    available_models: string[];
+    expects_preprocessed_features: boolean;
 }
 
 const predictionService = {
@@ -38,14 +58,11 @@ const predictionService = {
         return axiosInstance.get('/features');
     },
 
-    predict: async (patient: PatientFeatures, threshold?: number): Promise<PredictionResponse> => {
-        const params = threshold !== undefined ? { threshold } : {};
+    predict: async (patient: PatientFeatures, threshold?: number, model?: string): Promise<PredictionResponse> => {
+        const params: Record<string, unknown> = {};
+        if (threshold !== undefined) params.threshold = threshold;
+        if (model !== undefined) params.model = model;
         return axiosInstance.post('/predict', patient, { params });
-    },
-
-    predictBatch: async (items: PatientFeatures[], threshold?: number): Promise<{ predictions: PredictionResponse[] }> => {
-        const params = threshold !== undefined ? { threshold } : {};
-        return axiosInstance.post('/predict/batch', { items }, { params });
     },
 };
 
