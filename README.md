@@ -200,18 +200,14 @@ Sau khi da train model:
 python -m src.predict_xgboost --input data/X_val.csv --output reports/new_predictions.csv
 ```
 
-## Chay FastAPI server
+## API voi bo du lieu moi
 
-Server mac dinh dung model tot nhat tai `models/improved_best_model.joblib`.
+API hien tai nhan dung 12 feature da preprocess/scale giong cac file `Data/X_train_final.csv`, `Data/X_val.csv`, `Data/X_test_final.csv`.
+
+Chay server:
 
 ```powershell
 python -m uvicorn src.api:app --host 127.0.0.1 --port 8000 --reload
-```
-
-Mo tai lieu API:
-
-```text
-http://127.0.0.1:8000/docs
 ```
 
 Kiem tra server:
@@ -220,42 +216,72 @@ Kiem tra server:
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/health
 ```
 
-Goi du doan mot benh nhan:
+Xem model co san:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/models
+```
+
+Goi du doan mot benh nhan voi XGBoost improved:
 
 ```powershell
 $body = @{
-  age = 70
-  bmi = 28.1
-  bnp = 456
-  sodium = 137.5
-  creatinine = 1.2
-  systolic_bp = 130
-  heart_rate = 82
-  adherence_score = 0.62
-  distance_to_hospital_km = 24.5
+  age = 1.4994980475525317
+  bmi = -0.16957741141794483
+  bnp = 0.2813581310178311
+  sodium = 0.3407817314775273
+  creatinine = 1.3621636626344145
+  systolic_bp = -0.0403355143463284
+  heart_rate = 0.43393264135275605
+  ace_inhibitor = 0.9247012835332911
+  beta_blocker = 0.9712465382469481
+  diuretic = -0.9783591080694793
+  adherence_score = 0.9212000066229001
+  distance_to_hospital_km = 0.9304731191402703
 } | ConvertTo-Json
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri http://127.0.0.1:8000/predict `
+  -Uri http://127.0.0.1:8000/predict/xgboost-improved `
   -ContentType "application/json" `
   -Body $body
 ```
 
-Response mau:
-
-```json
-{
-  "readmission_probability": 0.33965742588043213,
-  "predicted_label": 1,
-  "threshold": 0.3,
-  "model_path": "models\\improved_best_model.joblib"
-}
-```
-
-Neu muon dung model khac:
+Goi du doan mot benh nhan voi Logistic Regression:
 
 ```powershell
-$env:READMISSION_MODEL_PATH = "models/xgboost_basic.joblib"
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/predict/logistic `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Endpoint tong quat `/predict?model=...` van con de debug/so sanh nhanh. Gia tri hop le cho `model`: `improved_xgboost`, `logistic`, `base_xgboost`.
+
+Goi batch:
+
+```powershell
+$batch = @{
+  items = @($body | ConvertFrom-Json)
+} | ConvertTo-Json -Depth 4
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8000/predict/logistic/batch `
+  -ContentType "application/json" `
+  -Body $batch
+```
+
+Mo Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Neu muon doi model mac dinh khi khong truyen query `model`:
+
+```powershell
+$env:READMISSION_MODEL_ID = "logistic"
 python -m uvicorn src.api:app --host 127.0.0.1 --port 8000
 ```
