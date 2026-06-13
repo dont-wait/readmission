@@ -16,7 +16,7 @@ from sklearn.metrics import (
 )
 
 from src.config import load_config
-from src.data import load_test_data, load_train_validation_data
+from src.data import load_raw_preprocessed_data, load_test_data, load_train_validation_data
 from src.models.xgboost_model import build_xgboost_classifier
 from src.visualization.plots import save_basic_evaluation_plots
 
@@ -58,7 +58,16 @@ def evaluate_binary_classifier(
 
 def main() -> None:
     config = load_config(parse_args().config)
-    x_train, y_train, x_val, y_val = load_train_validation_data(config)
+    raw_data = load_raw_preprocessed_data(config)
+    if raw_data is not None:
+        x_train = raw_data["x_train"]
+        y_train = raw_data["y_train"]
+        x_val = raw_data["x_val"]
+        y_val = raw_data["y_val"]
+        preprocessing = raw_data["preprocessing"]
+    else:
+        x_train, y_train, x_val, y_val = load_train_validation_data(config)
+        preprocessing = None
 
     model = build_xgboost_classifier(config)
     training_config = config["training"]
@@ -93,6 +102,8 @@ def main() -> None:
         {
             "model": model,
             "feature_columns": list(x_train.columns),
+            "raw_feature_columns": list(x_train.columns),
+            "preprocessing": preprocessing,
             "config": config,
         },
         model_path,
@@ -126,7 +137,11 @@ def main() -> None:
         f"roc_auc={metrics['roc_auc']:.4f}"
     )
 
-    test_data = load_test_data(config, list(x_train.columns))
+    test_data = (
+        (raw_data["x_test"], raw_data["y_test"])
+        if raw_data is not None
+        else load_test_data(config, list(x_train.columns))
+    )
     if test_data is not None:
         x_test, y_test = test_data
         test_probability = pd.Series(

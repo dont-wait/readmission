@@ -18,7 +18,7 @@ from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from xgboost import XGBClassifier
 
 from src.config import load_config
-from src.data import load_test_data, load_train_validation_data
+from src.data import load_raw_preprocessed_data, load_test_data, load_train_validation_data
 from src.visualization.plots import (
     format_metric_value,
     save_basic_evaluation_plots,
@@ -390,7 +390,16 @@ def build_output_filename(prefix: str, filename: str) -> str:
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
-    x_train, y_train, x_val, y_val = load_train_validation_data(config)
+    raw_data = load_raw_preprocessed_data(config)
+    if raw_data is not None:
+        x_train = raw_data["x_train"]
+        y_train = raw_data["y_train"]
+        x_val = raw_data["x_val"]
+        y_val = raw_data["y_val"]
+        preprocessing = raw_data["preprocessing"]
+    else:
+        x_train, y_train, x_val, y_val = load_train_validation_data(config)
+        preprocessing = None
 
     output_config = config["outputs"]
     report_dir = Path(output_config.get("improved_report_dir", output_config["report_dir"]))
@@ -497,7 +506,11 @@ def main() -> None:
     test_predictions_path = None
     test_metrics_path = None
     test_plot_paths: dict[str, str] = {}
-    test_data = load_test_data(config, list(best_training_features.columns))
+    test_data = (
+        (raw_data["x_test"], raw_data["y_test"])
+        if raw_data is not None
+        else load_test_data(config, list(best_training_features.columns))
+    )
     if test_data is not None:
         x_test, y_test = test_data
         test_probabilities = pd.Series(
@@ -566,6 +579,7 @@ def main() -> None:
             "model": best_model,
             "feature_columns": list(best_training_features.columns),
             "raw_feature_columns": list(x_train.columns),
+            "preprocessing": preprocessing,
             "selected_threshold": best_threshold,
             "config": config,
             "summary": summary,

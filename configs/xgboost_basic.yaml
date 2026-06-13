@@ -1,4 +1,18 @@
 data:
+  raw_data_path: Data/heart_failure_readmission_dataset.csv
+  feature_columns:
+    - age
+    - bmi
+    - bnp
+    - sodium
+    - creatinine
+    - systolic_bp
+    - heart_rate
+    - ace_inhibitor
+    - beta_blocker
+    - diuretic
+    - adherence_score
+    - distance_to_hospital_km
   x_train_path: data/X_train_final.csv
   y_train_path: data/y_train_final.csv
   x_val_path: data/X_val.csv

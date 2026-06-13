@@ -31,53 +31,53 @@ class PatientFeatures(BaseModel):
         extra="forbid",
         json_schema_extra={
             "example": {
-                "age": 1.4994980475525317,
-                "bmi": -0.16957741141794483,
-                "bnp": 0.2813581310178311,
-                "sodium": 0.3407817314775273,
-                "creatinine": 1.3621636626344145,
-                "systolic_bp": -0.0403355143463284,
-                "heart_rate": 0.43393264135275605,
-                "ace_inhibitor": 0.9247012835332911,
-                "beta_blocker": 0.9712465382469481,
-                "diuretic": -0.9783591080694793,
-                "adherence_score": 0.9212000066229001,
-                "distance_to_hospital_km": 0.9304731191402703,
+                "age": 70,
+                "bmi": 28.1,
+                "bnp": 456,
+                "sodium": 137.5,
+                "creatinine": 1.2,
+                "systolic_bp": 130,
+                "heart_rate": 82,
+                "ace_inhibitor": 1,
+                "beta_blocker": 1,
+                "diuretic": 0,
+                "adherence_score": 0.62,
+                "distance_to_hospital_km": 24.5,
             }
         },
     )
 
-    age: float = Field(..., description="Preprocessed/scaled age feature.", examples=[1.4994980475525317])
-    bmi: float = Field(..., description="Preprocessed/scaled BMI feature.", examples=[-0.16957741141794483])
-    bnp: float = Field(..., description="Preprocessed/scaled BNP feature.", examples=[0.2813581310178311])
-    sodium: float = Field(..., description="Preprocessed/scaled sodium feature.", examples=[0.3407817314775273])
-    creatinine: float = Field(..., description="Preprocessed/scaled creatinine feature.", examples=[1.3621636626344145])
+    age: float = Field(..., description="Patient age in years.", examples=[70])
+    bmi: float = Field(..., description="Body mass index in kg/m2.", examples=[28.1])
+    bnp: float = Field(..., description="BNP level in pg/mL.", examples=[456])
+    sodium: float = Field(..., description="Serum sodium in mEq/L.", examples=[137.5])
+    creatinine: float = Field(..., description="Serum creatinine in mg/dL.", examples=[1.2])
     systolic_bp: float = Field(
         ...,
-        description="Preprocessed/scaled systolic blood pressure feature.",
-        examples=[-0.0403355143463284],
+        description="Systolic blood pressure in mmHg.",
+        examples=[130],
     )
-    heart_rate: float = Field(..., description="Preprocessed/scaled heart rate feature.", examples=[0.43393264135275605])
+    heart_rate: float = Field(..., description="Heart rate in beats per minute.", examples=[82])
     ace_inhibitor: float = Field(
         ...,
-        description="Preprocessed/scaled ACE inhibitor feature.",
-        examples=[0.9247012835332911],
+        description="Whether the patient uses an ACE inhibitor, 0 or 1.",
+        examples=[1],
     )
     beta_blocker: float = Field(
         ...,
-        description="Preprocessed/scaled beta blocker feature.",
-        examples=[0.9712465382469481],
+        description="Whether the patient uses a beta blocker, 0 or 1.",
+        examples=[1],
     )
-    diuretic: float = Field(..., description="Preprocessed/scaled diuretic feature.", examples=[-0.9783591080694793])
+    diuretic: float = Field(..., description="Whether the patient uses a diuretic, 0 or 1.", examples=[0])
     adherence_score: float = Field(
         ...,
-        description="Preprocessed/scaled medication adherence score feature.",
-        examples=[0.9212000066229001],
+        description="Medication adherence score from 0 to 1.",
+        examples=[0.62],
     )
     distance_to_hospital_km: float = Field(
         ...,
-        description="Preprocessed/scaled distance-to-hospital feature.",
-        examples=[0.9304731191402703],
+        description="Distance to hospital in kilometers.",
+        examples=[24.5],
     )
 
 
@@ -228,16 +228,55 @@ def get_threshold(bundle: dict[str, Any], threshold: float | None) -> float:
     return float(bundle.get("selected_threshold", 0.5))
 
 
-def build_feature_frame(records: list[PatientFeatures], feature_columns: list[str]) -> pd.DataFrame:
+def get_preprocessing(bundle: dict[str, Any]) -> dict[str, Any] | None:
+    preprocessing = bundle.get("preprocessing")
+    if isinstance(preprocessing, dict) and preprocessing.get("input_type") == "raw":
+        return preprocessing
+    return None
+
+
+def expects_preprocessed_features(bundle: dict[str, Any]) -> bool:
+    return get_preprocessing(bundle) is None
+
+
+def get_input_feature_columns(bundle: dict[str, Any]) -> list[str]:
+    preprocessing = get_preprocessing(bundle)
+    if preprocessing is not None:
+        return list(preprocessing.get("raw_feature_columns", bundle["feature_columns"]))
+    return list(bundle["feature_columns"])
+
+
+def build_feature_frame(records: list[PatientFeatures], bundle: dict[str, Any]) -> pd.DataFrame:
+    feature_columns = list(bundle["feature_columns"])
+    input_columns = get_input_feature_columns(bundle)
     data = pd.DataFrame([record.model_dump() for record in records])
-    missing_columns = [column for column in feature_columns if column not in data.columns]
+    missing_columns = [column for column in input_columns if column not in data.columns]
     if missing_columns:
         raise HTTPException(
             status_code=422,
             detail=f"Missing required feature columns for selected model: {missing_columns}",
         )
 
-    return data[feature_columns]
+    preprocessing = get_preprocessing(bundle)
+    if preprocessing is None:
+        return data[feature_columns]
+
+    imputer = preprocessing.get("imputer")
+    scaler = preprocessing.get("scaler")
+    if imputer is None or scaler is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model bundle declares raw preprocessing but is missing imputer or scaler.",
+        )
+
+    raw_features = data[input_columns].copy()
+    if "creatinine" in raw_features.columns:
+        raw_features.loc[raw_features["creatinine"] < 0, "creatinine"] = pd.NA
+
+    numeric_columns = list(preprocessing.get("numeric_columns", input_columns))
+    raw_features[numeric_columns] = imputer.transform(raw_features[numeric_columns])
+    transformed = scaler.transform(raw_features[input_columns])
+    return pd.DataFrame(transformed, columns=feature_columns)
 
 
 def predict_records(
@@ -249,9 +288,8 @@ def predict_records(
     model_metrics, model_metrics_path = load_model_metrics(selected_model_id)
 
     model = bundle["model"]
-    feature_columns = list(bundle["feature_columns"])
     selected_threshold = get_threshold(bundle, threshold)
-    features = build_feature_frame(records, feature_columns)
+    features = build_feature_frame(records, bundle)
 
     try:
         probabilities = model.predict_proba(features)[:, 1]
@@ -286,7 +324,7 @@ def get_model_info(model_id: str, model_path: Path) -> ModelInfo:
         model_path=str(model_path),
         exists=True,
         selected_threshold=float(bundle.get("selected_threshold", 0.5)),
-        feature_columns=list(bundle["feature_columns"]),
+        feature_columns=get_input_feature_columns(bundle),
     )
 
 
@@ -294,7 +332,8 @@ app = FastAPI(
     title="Readmission Prediction API",
     description=(
         "Predict 30-day hospital readmission risk using models trained on the new "
-        "12-feature preprocessed dataset. Prediction responses include patient-level "
+        "12-feature dataset. Models that include a saved preprocessing bundle accept "
+        "raw clinical values and scale them before prediction. Prediction responses include patient-level "
         "risk output and saved model-level evaluation metrics."
     ),
     version="2.0.0",
@@ -323,9 +362,9 @@ def health(model: str | None = Query(default=None, description=MODEL_QUERY_DESCR
         active_model_id=selected_model_id,
         active_model_path=str(model_path),
         threshold=float(bundle.get("selected_threshold", 0.5)),
-        feature_columns=list(bundle["feature_columns"]),
+        feature_columns=get_input_feature_columns(bundle),
         available_models=sorted(MODEL_REGISTRY),
-        expects_preprocessed_features=True,
+        expects_preprocessed_features=expects_preprocessed_features(bundle),
     )
 
 
@@ -349,8 +388,8 @@ def features(model: str | None = Query(default=None, description=MODEL_QUERY_DES
     selected_model_id, _, bundle = load_model_bundle(model)
     return FeaturesResponse(
         model_id=selected_model_id,
-        feature_columns=list(bundle["feature_columns"]),
-        expects_preprocessed_features=True,
+        feature_columns=get_input_feature_columns(bundle),
+        expects_preprocessed_features=expects_preprocessed_features(bundle),
         example=PatientFeatures.model_json_schema()["properties"],
     )
 

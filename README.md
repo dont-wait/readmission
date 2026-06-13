@@ -144,18 +144,18 @@ Gửi yêu cầu POST tới `/predict` với body JSON:
 curl -X POST http://127.0.0.1:8000/predict \
      -H "Content-Type: application/json" \
      -d '{
-       "age": 1.4994980475525317,
-       "bmi": -0.16957741141794483,
-       "bnp": 0.2813581310178311,
-       "sodium": 0.3407817314775273,
-       "creatinine": 1.3621636626344145,
-       "systolic_bp": -0.0403355143463284,
-       "heart_rate": 0.43393264135275605,
-       "ace_inhibitor": 0.9247012835332911,
-       "beta_blocker": 0.9712465382469481,
-       "diuretic": -0.9783591080694793,
-       "adherence_score": 0.9212000066229001,
-       "distance_to_hospital_km": 0.9304731191402703
+       "age": 70,
+       "bmi": 28.1,
+       "bnp": 456,
+       "sodium": 137.5,
+       "creatinine": 1.2,
+       "systolic_bp": 130,
+       "heart_rate": 82,
+       "ace_inhibitor": 1,
+       "beta_blocker": 1,
+       "diuretic": 0,
+       "adherence_score": 0.62,
+       "distance_to_hospital_km": 24.5
      }'
 ```
 
@@ -179,6 +179,20 @@ Sau khi chạy xong pipeline cải thiện, các file quan trọng bao gồm:
 
 ```yaml
 data:
+  raw_data_path: Data/heart_failure_readmission_dataset.csv
+  feature_columns:
+    - age
+    - bmi
+    - bnp
+    - sodium
+    - creatinine
+    - systolic_bp
+    - heart_rate
+    - ace_inhibitor
+    - beta_blocker
+    - diuretic
+    - adherence_score
+    - distance_to_hospital_km
   x_train_path: data/X_train_final.csv
   y_train_path: data/y_train_final.csv
   x_val_path: data/X_val.csv
@@ -205,7 +219,7 @@ python -m src.predict_xgboost --input data/X_val.csv --output reports/new_predic
 
 ## API Reference
 
-API hien tai nhan dung 12 feature da preprocess/scale giong cac file `Data/X_train_final.csv`, `Data/X_val.csv`, `Data/X_test_final.csv`. Khong gui gia tri raw nhu tuoi 70, BMI 28.1 neu model duoc train tren du lieu da scale.
+API hien tai nhan 12 feature raw neu model bundle co `preprocessing` da luu. API se tu impute/scale bang scaler trong bundle truoc khi goi model. Voi bundle cu khong co `preprocessing`, `/health` se tra `expects_preprocessed_features: true`.
 
 Chay server:
 
@@ -240,22 +254,22 @@ Neu khong truyen query `model`, API dung model mac dinh trong `READMISSION_MODEL
 
 ### PatientFeatures input
 
-Tat ca field ben duoi la bat buoc, kieu `number`, va la gia tri da preprocess/scale:
+Tat ca field ben duoi la bat buoc, kieu `number`, va la gia tri raw theo don vi lam sang:
 
 ```json
 {
-  "age": 1.4994980475525317,
-  "bmi": -0.16957741141794483,
-  "bnp": 0.2813581310178311,
-  "sodium": 0.3407817314775273,
-  "creatinine": 1.3621636626344145,
-  "systolic_bp": -0.0403355143463284,
-  "heart_rate": 0.43393264135275605,
-  "ace_inhibitor": 0.9247012835332911,
-  "beta_blocker": 0.9712465382469481,
-  "diuretic": -0.9783591080694793,
-  "adherence_score": 0.9212000066229001,
-  "distance_to_hospital_km": 0.9304731191402703
+  "age": 70,
+  "bmi": 28.1,
+  "bnp": 456,
+  "sodium": 137.5,
+  "creatinine": 1.2,
+  "systolic_bp": 130,
+  "heart_rate": 82,
+  "ace_inhibitor": 1,
+  "beta_blocker": 1,
+  "diuretic": 0,
+  "adherence_score": 0.62,
+  "distance_to_hospital_km": 24.5
 }
 ```
 
@@ -282,7 +296,7 @@ Output:
   "threshold": 0.36,
   "feature_columns": ["age", "bmi", "bnp", "sodium", "creatinine", "systolic_bp", "heart_rate", "ace_inhibitor", "beta_blocker", "diuretic", "adherence_score", "distance_to_hospital_km"],
   "available_models": ["base_xgboost", "improved_xgboost", "logistic"],
-  "expects_preprocessed_features": true
+  "expects_preprocessed_features": false
 }
 ```
 
@@ -327,11 +341,11 @@ Output:
 {
   "model_id": "improved_xgboost",
   "feature_columns": ["age", "bmi", "bnp", "sodium", "creatinine", "systolic_bp", "heart_rate", "ace_inhibitor", "beta_blocker", "diuretic", "adherence_score", "distance_to_hospital_km"],
-  "expects_preprocessed_features": true,
+  "expects_preprocessed_features": false,
   "example": {
     "age": {
       "type": "number",
-      "description": "Preprocessed/scaled age feature."
+      "description": "Patient age in years."
     }
   }
 }
@@ -345,18 +359,18 @@ Example:
 
 ```powershell
 $body = @{
-  age = 1.4994980475525317
-  bmi = -0.16957741141794483
-  bnp = 0.2813581310178311
-  sodium = 0.3407817314775273
-  creatinine = 1.3621636626344145
-  systolic_bp = -0.0403355143463284
-  heart_rate = 0.43393264135275605
-  ace_inhibitor = 0.9247012835332911
-  beta_blocker = 0.9712465382469481
-  diuretic = -0.9783591080694793
-  adherence_score = 0.9212000066229001
-  distance_to_hospital_km = 0.9304731191402703
+  age = 70
+  bmi = 28.1
+  bnp = 456
+  sodium = 137.5
+  creatinine = 1.2
+  systolic_bp = 130
+  heart_rate = 82
+  ace_inhibitor = 1
+  beta_blocker = 1
+  diuretic = 0
+  adherence_score = 0.62
+  distance_to_hospital_km = 24.5
 } | ConvertTo-Json
 
 Invoke-RestMethod `
