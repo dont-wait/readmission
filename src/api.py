@@ -23,51 +23,139 @@ MODEL_METRICS_REGISTRY = {
 }
 DEFAULT_MODEL_ID = os.getenv("READMISSION_MODEL_ID", "improved_xgboost")
 CUSTOM_MODEL_PATH_ENV = "READMISSION_MODEL_PATH"
+MODEL_QUERY_DESCRIPTION = "One of: improved_xgboost, logistic, base_xgboost"
 
 
 class PatientFeatures(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "age": 1.4994980475525317,
+                "bmi": -0.16957741141794483,
+                "bnp": 0.2813581310178311,
+                "sodium": 0.3407817314775273,
+                "creatinine": 1.3621636626344145,
+                "systolic_bp": -0.0403355143463284,
+                "heart_rate": 0.43393264135275605,
+                "ace_inhibitor": 0.9247012835332911,
+                "beta_blocker": 0.9712465382469481,
+                "diuretic": -0.9783591080694793,
+                "adherence_score": 0.9212000066229001,
+                "distance_to_hospital_km": 0.9304731191402703,
+            }
+        },
+    )
 
-    age: float = Field(..., examples=[1.4994980475525317])
-    bmi: float = Field(..., examples=[-0.16957741141794483])
-    bnp: float = Field(..., examples=[0.2813581310178311])
-    sodium: float = Field(..., examples=[0.3407817314775273])
-    creatinine: float = Field(..., examples=[1.3621636626344145])
-    systolic_bp: float = Field(..., examples=[-0.0403355143463284])
-    heart_rate: float = Field(..., examples=[0.43393264135275605])
-    ace_inhibitor: float = Field(..., examples=[0.9247012835332911])
-    beta_blocker: float = Field(..., examples=[0.9712465382469481])
-    diuretic: float = Field(..., examples=[-0.9783591080694793])
-    adherence_score: float = Field(..., examples=[0.9212000066229001])
-    distance_to_hospital_km: float = Field(..., examples=[0.9304731191402703])
+    age: float = Field(..., description="Preprocessed/scaled age feature.", examples=[1.4994980475525317])
+    bmi: float = Field(..., description="Preprocessed/scaled BMI feature.", examples=[-0.16957741141794483])
+    bnp: float = Field(..., description="Preprocessed/scaled BNP feature.", examples=[0.2813581310178311])
+    sodium: float = Field(..., description="Preprocessed/scaled sodium feature.", examples=[0.3407817314775273])
+    creatinine: float = Field(..., description="Preprocessed/scaled creatinine feature.", examples=[1.3621636626344145])
+    systolic_bp: float = Field(
+        ...,
+        description="Preprocessed/scaled systolic blood pressure feature.",
+        examples=[-0.0403355143463284],
+    )
+    heart_rate: float = Field(..., description="Preprocessed/scaled heart rate feature.", examples=[0.43393264135275605])
+    ace_inhibitor: float = Field(
+        ...,
+        description="Preprocessed/scaled ACE inhibitor feature.",
+        examples=[0.9247012835332911],
+    )
+    beta_blocker: float = Field(
+        ...,
+        description="Preprocessed/scaled beta blocker feature.",
+        examples=[0.9712465382469481],
+    )
+    diuretic: float = Field(..., description="Preprocessed/scaled diuretic feature.", examples=[-0.9783591080694793])
+    adherence_score: float = Field(
+        ...,
+        description="Preprocessed/scaled medication adherence score feature.",
+        examples=[0.9212000066229001],
+    )
+    distance_to_hospital_km: float = Field(
+        ...,
+        description="Preprocessed/scaled distance-to-hospital feature.",
+        examples=[0.9304731191402703],
+    )
 
 
 class BatchPredictionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    items: list[PatientFeatures] = Field(..., min_length=1)
+    items: list[PatientFeatures] = Field(
+        ...,
+        min_length=1,
+        description="One or more patient feature rows to score.",
+    )
+
+
+class ModelMetrics(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    threshold: float | None = Field(default=None, description="Threshold used when the saved metrics were computed.")
+    accuracy: float | None = Field(default=None, description="Accuracy on the saved evaluation split.")
+    precision: float | None = Field(default=None, description="Positive-class precision on the saved evaluation split.")
+    recall: float | None = Field(default=None, description="Positive-class recall on the saved evaluation split.")
+    f1: float | None = Field(default=None, description="Positive-class F1 score on the saved evaluation split.")
+    roc_auc: float | None = Field(default=None, description="ROC AUC on the saved evaluation split.")
+    average_precision: float | None = Field(
+        default=None,
+        description="Average precision score on the saved evaluation split.",
+    )
+    tn: int | None = Field(default=None, description="True negatives.")
+    fp: int | None = Field(default=None, description="False positives.")
+    fn: int | None = Field(default=None, description="False negatives.")
+    tp: int | None = Field(default=None, description="True positives.")
+    predicted_positive: int | None = Field(default=None, description="Number of positive predictions.")
+    confusion_matrix: list[list[int]] | None = Field(default=None, description="Confusion matrix if available.")
+    classification_report: dict[str, Any] | None = Field(default=None, description="Classification report if available.")
 
 
 class PredictionResponse(BaseModel):
-    readmission_probability: float
-    predicted_label: int
-    threshold: float
-    model_id: str
-    model_path: str
-    model_metrics: dict[str, Any] | None = None
-    model_metrics_path: str | None = None
+    readmission_probability: float = Field(
+        ...,
+        description="Predicted probability for 30-day readmission, from 0 to 1.",
+    )
+    predicted_label: int = Field(..., description="Binary prediction after thresholding. 1 means high risk, 0 means low risk.")
+    threshold: float = Field(..., description="Threshold used to convert probability into predicted_label.")
+    model_id: str = Field(..., description="Model used for this prediction.")
+    model_path: str = Field(..., description="Path to the loaded model bundle.")
+    model_metrics: ModelMetrics | None = Field(
+        default=None,
+        description="Saved model-level evaluation metrics. These are not computed from a single patient request.",
+    )
+    model_metrics_path: str | None = Field(default=None, description="Path to the saved metrics JSON file.")
 
 
 class BatchPredictionResponse(BaseModel):
-    predictions: list[PredictionResponse]
+    predictions: list[PredictionResponse] = Field(..., description="Prediction result for each submitted item.")
 
 
 class ModelInfo(BaseModel):
+    model_id: str = Field(..., description="Registered model id.")
+    model_path: str = Field(..., description="Path to the model bundle.")
+    exists: bool = Field(..., description="Whether the model bundle exists and can be loaded.")
+    selected_threshold: float | None = Field(default=None, description="Saved threshold from training, if available.")
+    feature_columns: list[str] | None = Field(default=None, description="Feature columns expected by this model.")
+
+
+class HealthResponse(BaseModel):
+    status: str = Field(..., examples=["ok"])
+    active_model_id: str
+    active_model_path: str
+    threshold: float
+    feature_columns: list[str]
+    available_models: list[str]
+    expects_preprocessed_features: bool
+
+
+class FeaturesResponse(BaseModel):
     model_id: str
-    model_path: str
-    exists: bool
-    selected_threshold: float | None = None
-    feature_columns: list[str] | None = None
+    feature_columns: list[str]
+    expects_preprocessed_features: bool
+    example: dict[str, Any]
 
 
 def resolve_model_path(model_id: str | None = None) -> tuple[str, Path]:
@@ -206,7 +294,8 @@ app = FastAPI(
     title="Readmission Prediction API",
     description=(
         "Predict 30-day hospital readmission risk using models trained on the new "
-        "12-feature preprocessed dataset."
+        "12-feature preprocessed dataset. Prediction responses include patient-level "
+        "risk output and saved model-level evaluation metrics."
     ),
     version="2.0.0",
 )
@@ -221,81 +310,126 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
-def health(model: str | None = Query(default=None)) -> dict[str, Any]:
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["Metadata"],
+    summary="Check API and active model status",
+)
+def health(model: str | None = Query(default=None, description=MODEL_QUERY_DESCRIPTION)) -> HealthResponse:
     selected_model_id, model_path, bundle = load_model_bundle(model)
-    return {
-        "status": "ok",
-        "active_model_id": selected_model_id,
-        "active_model_path": str(model_path),
-        "threshold": float(bundle.get("selected_threshold", 0.5)),
-        "feature_columns": list(bundle["feature_columns"]),
-        "available_models": sorted(MODEL_REGISTRY),
-        "expects_preprocessed_features": True,
-    }
+    return HealthResponse(
+        status="ok",
+        active_model_id=selected_model_id,
+        active_model_path=str(model_path),
+        threshold=float(bundle.get("selected_threshold", 0.5)),
+        feature_columns=list(bundle["feature_columns"]),
+        available_models=sorted(MODEL_REGISTRY),
+        expects_preprocessed_features=True,
+    )
 
 
-@app.get("/models", response_model=list[ModelInfo])
+@app.get(
+    "/models",
+    response_model=list[ModelInfo],
+    tags=["Metadata"],
+    summary="List registered models",
+)
 def models() -> list[ModelInfo]:
     return [get_model_info(model_id, path) for model_id, path in MODEL_REGISTRY.items()]
 
 
-@app.get("/features")
-def features(model: str | None = Query(default=None)) -> dict[str, Any]:
+@app.get(
+    "/features",
+    response_model=FeaturesResponse,
+    tags=["Metadata"],
+    summary="Get expected feature columns",
+)
+def features(model: str | None = Query(default=None, description=MODEL_QUERY_DESCRIPTION)) -> FeaturesResponse:
     selected_model_id, _, bundle = load_model_bundle(model)
-    return {
-        "model_id": selected_model_id,
-        "feature_columns": list(bundle["feature_columns"]),
-        "expects_preprocessed_features": True,
-        "example": PatientFeatures.model_json_schema()["properties"],
-    }
+    return FeaturesResponse(
+        model_id=selected_model_id,
+        feature_columns=list(bundle["feature_columns"]),
+        expects_preprocessed_features=True,
+        example=PatientFeatures.model_json_schema()["properties"],
+    )
 
 
-@app.post("/predict", response_model=PredictionResponse)
+@app.post(
+    "/predict",
+    response_model=PredictionResponse,
+    tags=["Prediction"],
+    summary="Predict readmission risk with a selectable model",
+)
 def predict(
     patient: PatientFeatures,
-    threshold: float | None = Query(default=None, ge=0.0, le=1.0),
-    model: str | None = Query(default=None, description="One of: improved_xgboost, logistic, base_xgboost"),
+    threshold: float | None = Query(default=None, ge=0.0, le=1.0, description="Optional classification threshold."),
+    model: str | None = Query(default=None, description=MODEL_QUERY_DESCRIPTION),
 ) -> PredictionResponse:
     return predict_records([patient], threshold, model)[0]
 
 
-@app.post("/predict/xgboost-improved", response_model=PredictionResponse)
+@app.post(
+    "/predict/xgboost-improved",
+    response_model=PredictionResponse,
+    tags=["Prediction"],
+    summary="Predict readmission risk with the improved XGBoost model",
+)
 def predict_xgboost_improved(
     patient: PatientFeatures,
-    threshold: float | None = Query(default=None, ge=0.0, le=1.0),
+    threshold: float | None = Query(default=None, ge=0.0, le=1.0, description="Optional classification threshold."),
 ) -> PredictionResponse:
     return predict_records([patient], threshold, "improved_xgboost")[0]
 
 
-@app.post("/predict/logistic", response_model=PredictionResponse)
+@app.post(
+    "/predict/logistic",
+    response_model=PredictionResponse,
+    tags=["Prediction"],
+    summary="Predict readmission risk with the logistic regression model",
+)
 def predict_logistic(
     patient: PatientFeatures,
-    threshold: float | None = Query(default=None, ge=0.0, le=1.0),
+    threshold: float | None = Query(default=None, ge=0.0, le=1.0, description="Optional classification threshold."),
 ) -> PredictionResponse:
     return predict_records([patient], threshold, "logistic")[0]
 
 
-@app.post("/predict/batch", response_model=BatchPredictionResponse)
+@app.post(
+    "/predict/batch",
+    response_model=BatchPredictionResponse,
+    tags=["Prediction"],
+    summary="Predict readmission risk for multiple patients with a selectable model",
+)
 def predict_batch(
     request: BatchPredictionRequest,
-    threshold: float | None = Query(default=None, ge=0.0, le=1.0),
-    model: str | None = Query(default=None, description="One of: improved_xgboost, logistic, base_xgboost"),
+    threshold: float | None = Query(default=None, ge=0.0, le=1.0, description="Optional classification threshold."),
+    model: str | None = Query(default=None, description=MODEL_QUERY_DESCRIPTION),
 ) -> BatchPredictionResponse:
     return BatchPredictionResponse(predictions=predict_records(request.items, threshold, model))
 
 
-@app.post("/predict/xgboost-improved/batch", response_model=BatchPredictionResponse)
+@app.post(
+    "/predict/xgboost-improved/batch",
+    response_model=BatchPredictionResponse,
+    tags=["Prediction"],
+    summary="Predict readmission risk for multiple patients with the improved XGBoost model",
+)
 def predict_xgboost_improved_batch(
     request: BatchPredictionRequest,
-    threshold: float | None = Query(default=None, ge=0.0, le=1.0),
+    threshold: float | None = Query(default=None, ge=0.0, le=1.0, description="Optional classification threshold."),
 ) -> BatchPredictionResponse:
     return BatchPredictionResponse(predictions=predict_records(request.items, threshold, "improved_xgboost"))
 
 
-@app.post("/predict/logistic/batch", response_model=BatchPredictionResponse)
+@app.post(
+    "/predict/logistic/batch",
+    response_model=BatchPredictionResponse,
+    tags=["Prediction"],
+    summary="Predict readmission risk for multiple patients with the logistic regression model",
+)
 def predict_logistic_batch(
     request: BatchPredictionRequest,
-    threshold: float | None = Query(default=None, ge=0.0, le=1.0),
+    threshold: float | None = Query(default=None, ge=0.0, le=1.0, description="Optional classification threshold."),
 ) -> BatchPredictionResponse:
     return BatchPredictionResponse(predictions=predict_records(request.items, threshold, "logistic"))

@@ -144,15 +144,18 @@ Gửi yêu cầu POST tới `/predict` với body JSON:
 curl -X POST http://127.0.0.1:8000/predict \
      -H "Content-Type: application/json" \
      -d '{
-       "age": 70,
-       "bmi": 28.1,
-       "bnp": 456,
-       "sodium": 137.5,
-       "creatinine": 1.2,
-       "systolic_bp": 130,
-       "heart_rate": 82,
-       "adherence_score": 0.62,
-       "distance_to_hospital_km": 24.5
+       "age": 1.4994980475525317,
+       "bmi": -0.16957741141794483,
+       "bnp": 0.2813581310178311,
+       "sodium": 0.3407817314775273,
+       "creatinine": 1.3621636626344145,
+       "systolic_bp": -0.0403355143463284,
+       "heart_rate": 0.43393264135275605,
+       "ace_inhibitor": 0.9247012835332911,
+       "beta_blocker": 0.9712465382469481,
+       "diuretic": -0.9783591080694793,
+       "adherence_score": 0.9212000066229001,
+       "distance_to_hospital_km": 0.9304731191402703
      }'
 ```
 
@@ -200,9 +203,9 @@ Sau khi da train model:
 python -m src.predict_xgboost --input data/X_val.csv --output reports/new_predictions.csv
 ```
 
-## API voi bo du lieu moi
+## API Reference
 
-API hien tai nhan dung 12 feature da preprocess/scale giong cac file `Data/X_train_final.csv`, `Data/X_val.csv`, `Data/X_test_final.csv`.
+API hien tai nhan dung 12 feature da preprocess/scale giong cac file `Data/X_train_final.csv`, `Data/X_val.csv`, `Data/X_test_final.csv`. Khong gui gia tri raw nhu tuoi 70, BMI 28.1 neu model duoc train tren du lieu da scale.
 
 Chay server:
 
@@ -210,19 +213,135 @@ Chay server:
 python -m uvicorn src.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Kiem tra server:
+Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### Models
+
+Model id hop le:
+
+| model_id | Model file | Metrics file |
+|---|---|---|
+| `improved_xgboost` | `models/improved_best_model.joblib` | `reports/improved/test_metrics.json` |
+| `logistic` | `models/logistic_regression_best_model.joblib` | `reports/logistic/test_metrics.json` |
+| `base_xgboost` | `models/xgboost_basic.joblib` | `reports/base/test_metrics.json` |
+
+Neu khong truyen query `model`, API dung model mac dinh trong `READMISSION_MODEL_ID`, mac dinh la `improved_xgboost`.
+
+### Common query params
+
+| Param | Type | Ap dung | Mo ta |
+|---|---|---|---|
+| `model` | string | `/health`, `/features`, `/predict`, `/predict/batch` | Mot trong `improved_xgboost`, `logistic`, `base_xgboost`. |
+| `threshold` | number, 0-1 | Tat ca endpoint `/predict...` | Neu truyen vao, API dung threshold nay de tao `predicted_label`; neu khong, dung threshold luu trong model bundle. |
+
+### PatientFeatures input
+
+Tat ca field ben duoi la bat buoc, kieu `number`, va la gia tri da preprocess/scale:
+
+```json
+{
+  "age": 1.4994980475525317,
+  "bmi": -0.16957741141794483,
+  "bnp": 0.2813581310178311,
+  "sodium": 0.3407817314775273,
+  "creatinine": 1.3621636626344145,
+  "systolic_bp": -0.0403355143463284,
+  "heart_rate": 0.43393264135275605,
+  "ace_inhibitor": 0.9247012835332911,
+  "beta_blocker": 0.9712465382469481,
+  "diuretic": -0.9783591080694793,
+  "adherence_score": 0.9212000066229001,
+  "distance_to_hospital_km": 0.9304731191402703
+}
+```
+
+API dat `extra="forbid"`, nen field thua hoac field sai ten se bi tra ve loi validation `422`.
+
+### `GET /health`
+
+Kiem tra server va model dang active.
+
+Example:
 
 ```powershell
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/health
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/health?model=logistic"
 ```
 
-Xem model co san:
+Output:
+
+```json
+{
+  "status": "ok",
+  "active_model_id": "improved_xgboost",
+  "active_model_path": "models/improved_best_model.joblib",
+  "threshold": 0.36,
+  "feature_columns": ["age", "bmi", "bnp", "sodium", "creatinine", "systolic_bp", "heart_rate", "ace_inhibitor", "beta_blocker", "diuretic", "adherence_score", "distance_to_hospital_km"],
+  "available_models": ["base_xgboost", "improved_xgboost", "logistic"],
+  "expects_preprocessed_features": true
+}
+```
+
+### `GET /models`
+
+Liet ke cac model da dang ky va trang thai file model.
+
+Example:
 
 ```powershell
 Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/models
 ```
 
-Goi du doan mot benh nhan voi XGBoost improved:
+Output:
+
+```json
+[
+  {
+    "model_id": "improved_xgboost",
+    "model_path": "models/improved_best_model.joblib",
+    "exists": true,
+    "selected_threshold": 0.36,
+    "feature_columns": ["age", "bmi", "bnp", "sodium", "creatinine", "systolic_bp", "heart_rate", "ace_inhibitor", "beta_blocker", "diuretic", "adherence_score", "distance_to_hospital_km"]
+  }
+]
+```
+
+### `GET /features`
+
+Lay danh sach cot feature model yeu cau va schema example.
+
+Example:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:8000/features
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/features?model=base_xgboost"
+```
+
+Output:
+
+```json
+{
+  "model_id": "improved_xgboost",
+  "feature_columns": ["age", "bmi", "bnp", "sodium", "creatinine", "systolic_bp", "heart_rate", "ace_inhibitor", "beta_blocker", "diuretic", "adherence_score", "distance_to_hospital_km"],
+  "expects_preprocessed_features": true,
+  "example": {
+    "age": {
+      "type": "number",
+      "description": "Preprocessed/scaled age feature."
+    }
+  }
+}
+```
+
+### `POST /predict`
+
+Du doan mot benh nhan bang model truyen qua query param.
+
+Example:
 
 ```powershell
 $body = @{
@@ -242,24 +361,12 @@ $body = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri http://127.0.0.1:8000/predict/xgboost-improved `
+  -Uri "http://127.0.0.1:8000/predict?model=improved_xgboost" `
   -ContentType "application/json" `
   -Body $body
 ```
 
-Goi du doan mot benh nhan voi Logistic Regression:
-
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://127.0.0.1:8000/predict/logistic `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-Endpoint tong quat `/predict?model=...` van con de debug/so sanh nhanh. Gia tri hop le cho `model`: `improved_xgboost`, `logistic`, `base_xgboost`.
-
-Response cua cac endpoint predict se gom ket qua du doan cho benh nhan va chi so danh gia cua model tren tap test:
+Output:
 
 ```json
 {
@@ -286,9 +393,65 @@ Response cua cac endpoint predict se gom ket qua du doan cho benh nhan va chi so
 }
 ```
 
+Y nghia output:
+
+| Field | Type | Mo ta |
+|---|---|---|
+| `readmission_probability` | number | Xac suat tai nhap vien 30 ngay, tu 0 den 1. |
+| `predicted_label` | integer | `1` neu probability >= threshold, nguoc lai `0`. |
+| `threshold` | number | Threshold dung cho request nay. |
+| `model_id` | string | Model thuc su duoc dung. |
+| `model_path` | string | Duong dan file model. |
+| `model_metrics` | object/null | Chi so danh gia model da luu tren tap test. |
+| `model_metrics_path` | string/null | Duong dan file metrics. |
+
 Luu y: `readmission_probability` va `predicted_label` la ket qua cua request hien tai. `model_metrics` la chi so danh gia da luu cua model tren tap test, khong phai chi so tinh rieng cho mot benh nhan.
 
-Goi batch:
+### Model-specific predict endpoints
+
+Neu khong muon truyen query `model`, dung endpoint co san:
+
+| Endpoint | Model |
+|---|---|
+| `POST /predict/xgboost-improved` | `improved_xgboost` |
+| `POST /predict/logistic` | `logistic` |
+
+Hai endpoint nay nhan body `PatientFeatures` va tra ve `PredictionResponse` giong `/predict`.
+
+### Batch predict endpoints
+
+Request body batch co dang:
+
+```json
+{
+  "items": [
+    {
+      "age": 1.4994980475525317,
+      "bmi": -0.16957741141794483,
+      "bnp": 0.2813581310178311,
+      "sodium": 0.3407817314775273,
+      "creatinine": 1.3621636626344145,
+      "systolic_bp": -0.0403355143463284,
+      "heart_rate": 0.43393264135275605,
+      "ace_inhibitor": 0.9247012835332911,
+      "beta_blocker": 0.9712465382469481,
+      "diuretic": -0.9783591080694793,
+      "adherence_score": 0.9212000066229001,
+      "distance_to_hospital_km": 0.9304731191402703
+    }
+  ]
+}
+```
+
+Endpoints:
+
+| Endpoint | Model |
+|---|---|
+| `POST /predict/batch` | Query `model`, hoac model mac dinh |
+| `POST /predict/xgboost-improved/batch` | `improved_xgboost` |
+| `POST /predict/logistic/batch` | `logistic` |
+
+Example:
 
 ```powershell
 $batch = @{
@@ -297,16 +460,43 @@ $batch = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri http://127.0.0.1:8000/predict/logistic/batch `
+  -Uri "http://127.0.0.1:8000/predict/logistic/batch?threshold=0.29" `
   -ContentType "application/json" `
   -Body $batch
 ```
 
-Mo Swagger UI:
+Output:
 
-```text
-http://127.0.0.1:8000/docs
+```json
+{
+  "predictions": [
+    {
+      "readmission_probability": 0.71,
+      "predicted_label": 1,
+      "threshold": 0.29,
+      "model_id": "logistic",
+      "model_path": "models/logistic_regression_best_model.joblib",
+      "model_metrics": {
+        "accuracy": 0.575,
+        "precision": 0.4911504424778761,
+        "recall": 0.8987854251012146,
+        "f1": 0.6351931330472103,
+        "roc_auc": 0.6917227695519033,
+        "average_precision": 0.567186912130848
+      },
+      "model_metrics_path": "reports/logistic/test_metrics.json"
+    }
+  ]
+}
 ```
+
+### Common errors
+
+| HTTP status | Khi nao xay ra |
+|---|---|
+| `422` | Sai body, thieu field, thua field, `threshold` ngoai khoang 0-1, hoac `model` khong hop le. |
+| `503` | File model khong ton tai hoac model bundle thieu key bat buoc. Can train model truoc khi chay API. |
+| `500` | Loi khi model chay `predict_proba`. |
 
 Neu muon doi model mac dinh khi khong truyen query `model`:
 
