@@ -326,76 +326,77 @@ const PredictionPage: React.FC = () => {
                 </div>
 
                 <AnimatePresence mode="wait">
-                    {result && (
-                        <motion.div
-                            key="result"
-                            initial={{ opacity: 0, y: 60 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 60 }}
-                            transition={{ type: "spring", damping: 25, stiffness: 120 }}
-                            className="mt-16 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,0,0,0.08)] relative"
-                        >
-                            <div className="absolute top-0 right-0 w-80 h-80 bg-[#004282]/[0.03] rounded-full -mr-40 -mt-40" />
+                    {result && (() => {
+                        const strategy = getClinicalStrategy(result.readmission_probability, result.threshold, result.predicted_label);
+                        const isHigh = result.predicted_label === 1;
+                        const tierStyle: Record<string, { bg: string; border: string; badge: string; accent: string }> = {
+                            'CRITICAL': { bg: 'bg-red-50/50', border: 'border-red-200', badge: 'bg-[#e63946] text-white', accent: 'bg-[#e63946]' },
+                            'HIGH RISK': { bg: 'bg-orange-50/50', border: 'border-orange-200', badge: 'bg-orange-500 text-white', accent: 'bg-orange-500' },
+                            'BORDERLINE': { bg: 'bg-amber-50/50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-700', accent: 'bg-amber-400' },
+                            'STABLE': { bg: 'bg-emerald-50/50', border: 'border-emerald-200', badge: 'bg-[#2a9d8f] text-white', accent: 'bg-[#2a9d8f]' },
+                        };
+                        const ts = tierStyle[strategy.tier] ?? tierStyle['STABLE'];
 
-                            <div className="relative z-10">
-                                {/* Zone 1 — Risk Hero (full width) */}
-                                <div className="px-10 pt-10 pb-8 border-b border-slate-100">
-                                    <h3 className="text-slate-400 font-black mb-8 uppercase text-[10px] tracking-[0.5em]">Risk Assessment</h3>
-                                    <div className="flex flex-col sm:flex-row items-center gap-8 sm:gap-12">
-                                        {/* Big number */}
+                        return (
+                            <motion.div
+                                key="result"
+                                initial={{ opacity: 0, y: 60 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 60 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+                                className="mt-16 rounded-3xl overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,0,0,0.12)]"
+                            >
+                                {/* Zone 1 — Dark Score Hero */}
+                                <div className="relative px-10 py-12 overflow-hidden">
+                                    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-3xl pointer-events-none ${isHigh ? 'bg-[#e63946]' : 'bg-[#2a9d8f]'}`} />
+                                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-8 sm:gap-14">
                                         <div className="flex flex-col items-center shrink-0">
-                                            <span className={`text-[7rem] leading-none font-black tracking-tighter transition-colors ${(result.readmission_probability * 100) > (result.threshold * 100) ? 'text-[#e63946]' : 'text-[#2a9d8f]'}`}>
-                                                {Math.round(result.readmission_probability * 100)}%
+                                            <p className="text-[9px] font-black text-white/25 uppercase tracking-[0.5em] mb-2">30-Day Readmission</p>
+                                            <div className="flex items-end gap-1.5">
+                                                <motion.span
+                                                    initial={{ opacity: 0, y: 16 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                                                    className={`font-black leading-none tracking-tighter ${isHigh ? 'text-[#ff4d6d]' : 'text-[#26c485]'}`}
+                                                    style={{ fontSize: 'clamp(5rem, 11vw, 8rem)' }}
+                                                >
+                                                    {Math.round(result.readmission_probability * 100)}
+                                                </motion.span>
+                                                <span className="text-white/25 font-black text-3xl mb-3">%</span>
+                                            </div>
+                                            <span className={`inline-flex px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border mt-3 ${isHigh ? 'text-[#ff4d6d] bg-[#e63946]/10 border-[#e63946]/25' : 'text-[#26c485] bg-[#2a9d8f]/10 border-[#2a9d8f]/25'}`}>
+                                                {isHigh ? 'High Risk' : 'Low Risk'}
                                             </span>
-                                            <span className="text-slate-400 text-xs font-bold tracking-widest uppercase opacity-60 mt-1">Probability Score</span>
-                                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] mt-0.5">30-Day Readmission</span>
                                         </div>
 
-                                        {/* Progress bar + classification */}
-                                        <div className="flex-1 w-full space-y-5">
-                                            <div className="flex justify-between items-center">
-                                                <div className="space-y-0.5">
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Classification</span>
-                                                    <p className="text-xs font-bold text-slate-400 opacity-50 italic">Decision Threshold: {(result.threshold * 100).toFixed(1)}%</p>
+                                        <div className="flex-1 w-full space-y-4">
+                                            <div className="relative">
+                                                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                                    <motion.div
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${result.readmission_probability * 100}%` }}
+                                                        transition={{ duration: 2.2, ease: [0.22, 1, 0.36, 1], delay: 0.35 }}
+                                                        className={`h-full rounded-full ${isHigh ? 'bg-gradient-to-r from-amber-400 to-[#e63946]' : 'bg-gradient-to-r from-teal-400 to-[#26c485]'}`}
+                                                    />
                                                 </div>
-                                                <span className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-sm ${result.predicted_label === 1 ? 'bg-red-50 text-[#e63946] border border-red-100' : 'bg-emerald-50 text-[#2a9d8f] border border-emerald-100'}`}>
-                                                    {result.predicted_label === 1 ? 'High Risk' : 'Low Risk'}
-                                                </span>
+                                                <div
+                                                    className="absolute top-1/2 -translate-y-1/2 w-px h-5 bg-white/30"
+                                                    style={{ left: `${result.threshold * 100}%` }}
+                                                />
                                             </div>
-                                            <div className="w-full bg-slate-50 h-7 rounded-full overflow-hidden p-1.5 border border-slate-100 shadow-inner">
-                                                <motion.div
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${result.readmission_probability * 100}%` }}
-                                                    transition={{ duration: 2.5, ease: [0.22, 1, 0.36, 1] }}
-                                                    className={`h-full rounded-full relative ${result.predicted_label === 1 ? 'bg-gradient-to-r from-[#e63946] to-[#ff4d6d]' : 'bg-gradient-to-r from-[#2a9d8f] to-[#26c485]'}`}
-                                                >
-                                                    <div className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
-                                                </motion.div>
-                                            </div>
-                                            <div className="flex justify-between px-1 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">
-                                                <span>Baseline Stable</span>
-                                                <span>Acute Decompensation</span>
+                                            <div className="flex justify-between text-[8px] font-black text-white/15 uppercase tracking-[0.3em]">
+                                                <span className="mx-auto text-white/30">Threshold {(result.threshold * 100).toFixed(1)}%</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Zone 2 — Diagnostics + Clinical Protocol (balanced 2-col) */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
-                                    {/* Diagnostics Hub */}
-                                    <div className="p-8">
-                                        <div className="flex gap-4 mb-7">
-                                            <div className="p-4 rounded-2xl bg-[#004282] text-white shadow-lg shadow-blue-200 shrink-0">
-                                                <Activity size={22} />
-                                            </div>
-                                            <div className="flex flex-col justify-center">
-                                                <h4 className="font-black text-slate-800 text-lg tracking-tight leading-none">Diagnostics Hub</h4>
-                                                <p className="text-[10px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest opacity-60">Engine: {result.model_id}</p>
-                                            </div>
-                                        </div>
-
-                                        {result.model_metrics ? (
-                                            <div className="space-y-6">
+                                {/* Zone 2 — Metrics + Confusion Matrix */}
+                                <div className="bg-white border-t border-slate-100 p-8 space-y-8">
+                                    {result.model_metrics ? (
+                                        <>
+                                            <div>
+                                                <p className="text-[9px] font-black uppercase tracking-[0.4em] mb-4">Model Performance</p>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     {[
                                                         { label: 'Accuracy', value: result.model_metrics.accuracy },
@@ -404,122 +405,60 @@ const PredictionPage: React.FC = () => {
                                                         { label: 'Precision', value: result.model_metrics.precision },
                                                         { label: 'Recall', value: result.model_metrics.recall },
                                                         { label: 'Avg Prec', value: result.model_metrics.average_precision },
-                                                    ].map((m) => (
-                                                        <div key={m.label} className="bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-100">
-                                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-300 mb-0.5">{m.label}</p>
-                                                            <p className="text-sm font-black text-slate-800 tracking-tight">{formatMetric(m.value)}</p>
-                                                        </div>
+                                                    ].map((m, i) => (
+                                                        <motion.div
+                                                            key={m.label}
+                                                            initial={{ opacity: 0, y: 8 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            transition={{ delay: 0.05 * i, duration: 0.35 }}
+                                                            className="group hover:bg-[#004282] rounded-xl px-4 py-4 border border-slate-100 hover:border-transparent transition-all duration-300 cursor-default"
+                                                        >
+                                                            <p className="text-[8px] mb-4 font-black uppercase tracking-[0.15em] group-hover:text-white/40 mb-1 transition-colors">{m.label}</p>
+                                                            <p className="text-sm font-black text-slate-400 group-hover:text-white tracking-tight transition-colors">{formatMetric(m.value)}</p>
+                                                        </motion.div>
                                                     ))}
                                                 </div>
+                                            </div>
 
-                                                <div className="pt-5 border-t border-slate-100">
-                                                    <div className="flex justify-between items-center mb-4">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Confusion Matrix</span>
-                                                        {result.model_metrics.predicted_positive === 0 ? (
-                                                            <span className="text-[10px] font-bold text-slate-300 italic">N/A</span>
-                                                        ) : (
-                                                            <span className="text-[10px] font-bold text-slate-300 italic">{result.model_metrics.predicted_positive}</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div className="space-y-3 text-center">
-                                                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                                                                <p className="text-[8px] font-black text-slate-400 uppercase mb-1">True Neg</p>
-                                                                {result.model_metrics.tn === 0 ? (
-                                                                    <p className="text-sm font-black text-slate-700">-</p>
-                                                                ) : (
-                                                                    <p className="text-sm font-black text-slate-700">{result.model_metrics.tn}</p>
-                                                                )}
-                                                            </div>
-                                                            <div className="p-3 rounded-xl bg-red-50/30 border border-red-50 text-red-600">
-                                                                <p className="text-[8px] font-black text-red-300 uppercase mb-1">False Pos</p>
-                                                                {result.model_metrics.fp === 0 ? (
-                                                                    <p className="text-sm font-black text-slate-700">-</p>
-                                                                ) : (
-                                                                    <p className="text-sm font-black">{result.model_metrics.fp}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="space-y-3 text-center">
-                                                            <div className="p-3 rounded-xl bg-orange-50/30 border border-orange-50 text-orange-600">
-                                                                <p className="text-[8px] font-black text-orange-300 uppercase mb-1">False Neg</p>
-                                                                {result.model_metrics.fn === 0 ? (
-                                                                    <p className="text-sm font-black text-slate-700">-</p>
-                                                                ) : (
-                                                                    <p className="text-sm font-black">{result.model_metrics.fn}</p>
-                                                                )}
-                                                            </div>
-                                                            <div className="p-3 rounded-xl bg-emerald-50/30 border border-emerald-50 text-emerald-600">
-                                                                <p className="text-[8px] font-black text-emerald-300 uppercase mb-1">True Pos</p>
-                                                                {result.model_metrics.tp === 0 ? (
-                                                                    <p className="text-sm font-black text-slate-700">-</p>
-                                                                ) : (
-                                                                    <p className="text-sm font-black">{result.model_metrics.tp}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                            <div className="pt-2 border-t border-slate-100">
+                                                <div className="flex items-center justify-between mb-5">
+                                                    <p className="text-[9px] font-black mt-4 uppercase tracking-[0.4em]">Confusion Matrix</p>
+                                                    {result.model_metrics.predicted_positive > 0 && (
+                                                        <span className="text-[9px] font-bold text-slate-300 font-mono">n = {result.model_metrics.predicted_positive}</span>
+                                                    )}
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2.5">
+                                                    {[
+                                                        { label: 'True Neg', value: result.model_metrics.tn, bg: 'bg-slate-50', border: 'border-slate-200', num: 'text-slate-700', sub: 'text-slate-400' },
+                                                        { label: 'False Pos', value: result.model_metrics.fp, bg: 'bg-red-50/60', border: 'border-red-100', num: 'text-red-600', sub: 'text-red-300' },
+                                                        { label: 'False Neg', value: result.model_metrics.fn, bg: 'bg-orange-50/60', border: 'border-orange-100', num: 'text-orange-600', sub: 'text-orange-300' },
+                                                        { label: 'True Pos', value: result.model_metrics.tp, bg: 'bg-emerald-50/60', border: 'border-emerald-100', num: 'text-emerald-600', sub: 'text-emerald-300' },
+                                                    ].map((cell, i) => (
+                                                        <motion.div
+                                                            key={cell.label}
+                                                            initial={{ opacity: 0, scale: 0.93 }}
+                                                            animate={{ opacity: 1, scale: 1 }}
+                                                            transition={{ delay: 0.3 + 0.07 * i, duration: 0.35 }}
+                                                            className={`${cell.bg} border ${cell.border} rounded-2xl px-4 py-5 text-center`}
+                                                        >
+                                                            <p className={`text-[8px] font-black uppercase tracking-[0.2em] ${cell.sub} mb-2`}>{cell.label}</p>
+                                                            <p className={`font-black ${cell.num} leading-none tabular-nums`} style={{ fontSize: 'clamp(1.75rem, 4vw, 2.5rem)' }}>
+                                                                {cell.value > 0 ? cell.value : '—'}
+                                                            </p>
+                                                        </motion.div>
+                                                    ))}
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <div className="py-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                                                <p className="text-xs font-bold text-slate-400 italic">Extended model telemetry unavailable</p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Clinical Strategy */}
-                                    {(() => {
-                                        const strategy = getClinicalStrategy(result.readmission_probability, result.threshold, result.predicted_label);
-                                        const tierColors: Record<string, string> = {
-                                            'CRITICAL': 'bg-red-50/30',
-                                            'HIGH RISK': 'bg-orange-50/20',
-                                            'BORDERLINE': 'bg-yellow-50/20',
-                                            'STABLE': 'bg-emerald-50/20',
-                                        };
-                                        const tierBorderColors: Record<string, string> = {
-                                            'CRITICAL': 'border-red-200',
-                                            'HIGH RISK': 'border-orange-100',
-                                            'BORDERLINE': 'border-yellow-100',
-                                            'STABLE': 'border-emerald-100',
-                                        };
-                                        const tierBadgeColors: Record<string, string> = {
-                                            'CRITICAL': 'bg-red-500 text-white',
-                                            'HIGH RISK': 'bg-orange-500 text-white',
-                                            'BORDERLINE': 'bg-yellow-100 text-yellow-700',
-                                            'STABLE': 'bg-[#2a9d8f] text-white',
-                                        };
-                                        return (
-                                            <div className={`p-8 flex flex-col justify-center gap-6 border-t-2 lg:border-t-0 lg:border-l-2 ${tierBorderColors[strategy.tier] ?? 'border-slate-100'} ${tierColors[strategy.tier] ?? 'bg-slate-50/20'}`}>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-1 h-8 rounded-full bg-[#001f3f]/10 shrink-0" />
-                                                    <div>
-                                                        <h4 className="font-black text-[#001f3f] uppercase text-[10px] tracking-[0.4em] mb-1">Clinical Protocol</h4>
-                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] ${tierBadgeColors[strategy.tier] ?? ''}`}>
-                                                            {strategy.tier}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <p className="text-base text-slate-700 leading-relaxed font-bold opacity-80 italic">
-                                                    "{strategy.text}"
-                                                </p>
-                                            </div>
-                                        );
-                                    })()}
+                                        </>
+                                    ) : (
+                                        <div className="py-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                            <p className="text-xs font-bold text-slate-400 italic">Extended model telemetry unavailable</p>
+                                        </div>
+                                    )}
                                 </div>
-
-                                {/* Zone 3 — Export (full width footer) */}
-                                <div className="px-8 py-5 border-t border-slate-100 bg-slate-50/40">
-                                    <button
-                                        className="w-full bg-[#011627] text-white py-5 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-black transition-all shadow-lg active:scale-[0.98] uppercase tracking-[0.2em] text-[10px]"
-                                        onClick={() => window.print()}
-                                    >
-                                        Extract Clinical Analysis Report
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.div>
-                    )}
+                            </motion.div>
+                        );
+                    })()}
                 </AnimatePresence>
             </main>
         </div>
