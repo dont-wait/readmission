@@ -1,3 +1,4 @@
+import json
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -14,6 +15,11 @@ MODEL_REGISTRY = {
     "improved_xgboost": Path("models/improved_best_model.joblib"),
     "logistic": Path("models/logistic_regression_best_model.joblib"),
     "base_xgboost": Path("models/xgboost_basic.joblib"),
+}
+MODEL_METRICS_REGISTRY = {
+    "improved_xgboost": Path("reports/improved/test_metrics.json"),
+    "logistic": Path("reports/logistic/test_metrics.json"),
+    "base_xgboost": Path("reports/base/test_metrics.json"),
 }
 DEFAULT_MODEL_ID = os.getenv("READMISSION_MODEL_ID", "improved_xgboost")
 CUSTOM_MODEL_PATH_ENV = "READMISSION_MODEL_PATH"
@@ -48,6 +54,8 @@ class PredictionResponse(BaseModel):
     threshold: float
     model_id: str
     model_path: str
+    model_metrics: dict[str, Any] | None = None
+    model_metrics_path: str | None = None
 
 
 class BatchPredictionResponse(BaseModel):
@@ -105,6 +113,27 @@ def load_model_bundle(model_id: str | None = None) -> tuple[str, Path, dict[str,
     return resolved_model_id, model_path, bundle
 
 
+@lru_cache(maxsize=8)
+def load_model_metrics_from_path(metrics_path_string: str) -> dict[str, Any]:
+    metrics_path = Path(metrics_path_string)
+    if not metrics_path.exists():
+        raise FileNotFoundError(f"Metrics file not found: {metrics_path}")
+
+    with metrics_path.open(encoding="utf-8") as metrics_file:
+        return json.load(metrics_file)
+
+
+def load_model_metrics(model_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    metrics_path = MODEL_METRICS_REGISTRY.get(model_id)
+    if metrics_path is None:
+        return None, None
+
+    try:
+        return load_model_metrics_from_path(str(metrics_path)), str(metrics_path)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None, str(metrics_path)
+
+
 def get_threshold(bundle: dict[str, Any], threshold: float | None) -> float:
     if threshold is not None:
         return threshold
@@ -129,6 +158,7 @@ def predict_records(
     model_id: str | None,
 ) -> list[PredictionResponse]:
     selected_model_id, model_path, bundle = load_model_bundle(model_id)
+    model_metrics, model_metrics_path = load_model_metrics(selected_model_id)
 
     model = bundle["model"]
     feature_columns = list(bundle["feature_columns"])
@@ -147,6 +177,8 @@ def predict_records(
             threshold=selected_threshold,
             model_id=selected_model_id,
             model_path=str(model_path),
+            model_metrics=model_metrics,
+            model_metrics_path=model_metrics_path,
         )
         for probability in probabilities
     ]

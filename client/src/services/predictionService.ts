@@ -16,7 +16,10 @@ export interface PredictionResponse {
     readmission_probability: number;
     predicted_label: number;
     threshold: number;
+    model_id: string;
     model_path: string;
+    model_metrics: Record<string, unknown> | null;
+    model_metrics_path: string | null;
 }
 
 export interface HealthResponse {

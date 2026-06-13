@@ -259,6 +259,35 @@ Invoke-RestMethod `
 
 Endpoint tong quat `/predict?model=...` van con de debug/so sanh nhanh. Gia tri hop le cho `model`: `improved_xgboost`, `logistic`, `base_xgboost`.
 
+Response cua cac endpoint predict se gom ket qua du doan cho benh nhan va chi so danh gia cua model tren tap test:
+
+```json
+{
+  "readmission_probability": 0.73,
+  "predicted_label": 1,
+  "threshold": 0.36,
+  "model_id": "improved_xgboost",
+  "model_path": "models/improved_best_model.joblib",
+  "model_metrics": {
+    "threshold": 0.36,
+    "accuracy": 0.575,
+    "precision": 0.4908675799086758,
+    "recall": 0.8704453441295547,
+    "f1": 0.6277372262773723,
+    "roc_auc": 0.6994758633345185,
+    "average_precision": 0.578637987989787,
+    "tn": 130,
+    "fp": 223,
+    "fn": 32,
+    "tp": 215,
+    "predicted_positive": 438
+  },
+  "model_metrics_path": "reports/improved/test_metrics.json"
+}
+```
+
+Luu y: `readmission_probability` va `predicted_label` la ket qua cua request hien tai. `model_metrics` la chi so danh gia da luu cua model tren tap test, khong phai chi so tinh rieng cho mot benh nhan.
+
 Goi batch:
 
 ```powershell
