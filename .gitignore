@@ -5,3 +5,16 @@ __pycache__/
 reports/
 .pytest_cache/
 *.csv
+.agents/
+.claude/
+skills-lock.json
+AGENTS.md
+CLAUDE.md
+.direnv/
+client/node_modules/
+client/dist/
+.env
+.envrc
+*.joblib
+models/*.joblib
+!models/.gitkeep
