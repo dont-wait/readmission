@@ -16,7 +16,7 @@ from sklearn.metrics import (
 )
 
 from src.config import load_config
-from src.data import load_train_validation_data
+from src.data import load_test_data, load_train_validation_data
 from src.models.xgboost_model import build_xgboost_classifier
 from src.visualization.plots import save_basic_evaluation_plots
 
@@ -125,6 +125,57 @@ def main() -> None:
         f"f1={metrics['f1']:.4f}, "
         f"roc_auc={metrics['roc_auc']:.4f}"
     )
+
+    test_data = load_test_data(config, list(x_train.columns))
+    if test_data is not None:
+        x_test, y_test = test_data
+        test_probability = pd.Series(
+            model.predict_proba(x_test)[:, 1],
+            name="readmission_probability",
+        )
+        test_metrics = evaluate_binary_classifier(y_test, test_probability, threshold)
+        test_metrics_path = report_dir / output_config.get(
+            "test_metrics_filename",
+            "xgboost_basic_test_metrics.json",
+        )
+        test_predictions_path = report_dir / output_config.get(
+            "test_predictions_filename",
+            "xgboost_basic_test_predictions.csv",
+        )
+
+        with test_metrics_path.open("w", encoding="utf-8") as file:
+            json.dump(test_metrics, file, indent=2)
+
+        pd.DataFrame(
+            {
+                "actual": y_test,
+                "predicted_probability": test_probability,
+                "predicted_label": (test_probability >= threshold).astype(int),
+            }
+        ).to_csv(test_predictions_path, index=False)
+
+        test_plot_paths = save_basic_evaluation_plots(
+            model,
+            x_test,
+            y_test,
+            test_probability,
+            threshold,
+            plot_dir / "test",
+        )
+
+        print(f"Test metrics saved to: {test_metrics_path}")
+        print(f"Test predictions saved to: {test_predictions_path}")
+        print(f"Test plots saved to: {plot_dir / 'test'}")
+        for plot_name, plot_path in test_plot_paths.items():
+            print(f"- test_{plot_name}: {plot_path}")
+        print(
+            "Test metrics: "
+            f"accuracy={test_metrics['accuracy']:.4f}, "
+            f"precision={test_metrics['precision']:.4f}, "
+            f"recall={test_metrics['recall']:.4f}, "
+            f"f1={test_metrics['f1']:.4f}, "
+            f"roc_auc={test_metrics['roc_auc']:.4f}"
+        )
 
 
 if __name__ == "__main__":

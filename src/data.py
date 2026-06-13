@@ -47,3 +47,26 @@ def load_train_validation_data(config: dict) -> tuple[pd.DataFrame, pd.Series, p
         raise ValueError("Train and validation feature columns do not match.")
 
     return x_train, y_train, x_val, y_val
+
+
+def load_test_data(
+    config: dict,
+    expected_columns: list[str],
+) -> tuple[pd.DataFrame, pd.Series] | None:
+    data_config = config["data"]
+    x_test_path = data_config.get("x_test_path")
+    y_test_path = data_config.get("y_test_path")
+
+    if not x_test_path or not y_test_path:
+        return None
+
+    x_test, y_test = load_feature_target_pair(
+        x_test_path,
+        y_test_path,
+        data_config["target_column"],
+    )
+
+    if list(x_test.columns) != expected_columns:
+        raise ValueError("Train and test feature columns do not match.")
+
+    return x_test, y_test

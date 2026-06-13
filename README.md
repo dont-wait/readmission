@@ -19,12 +19,12 @@ python -m src.train_xgboost --config configs/xgboost_basic.yaml
 Sau khi train, pipeline se tao:
 
 - `models/xgboost_basic.joblib`: model da train
-- `reports/xgboost_basic_metrics.json`: accuracy, precision, recall, f1, ROC AUC, average precision
-- `reports/xgboost_basic_val_predictions.csv`: xac suat va nhan du doan tren tap validation
-- `reports/figures/confusion_matrix.png`: ma tran nham lan
-- `reports/figures/roc_curve.png`: ROC curve
-- `reports/figures/precision_recall_curve.png`: precision-recall curve
-- `reports/figures/feature_importance.png`: muc do quan trong cua tung feature
+- `reports/base/validation_metrics.json`: accuracy, precision, recall, f1, ROC AUC, average precision
+- `reports/base/validation_predictions.csv`: xac suat va nhan du doan tren tap validation
+- `reports/base/test_metrics.json`: metrics tren tap test neu config co `x_test_path`/`y_test_path`
+- `reports/base/test_predictions.csv`: xac suat va nhan du doan tren tap test
+- `reports/base/figures/confusion_matrix.png`: ma tran nham lan validation
+- `reports/base/figures/test/`: bieu do tren tap test
 
 ## Cai thien model
 
@@ -42,14 +42,69 @@ python -m src.improve_models --config configs/xgboost_basic.yaml --n-iter 25 --c
 
 Pipeline se tao:
 
-- `reports/improved_model_comparison.csv`: bang so sanh XGBoost goc va XGBoost tuned
-- `reports/improved_key_metrics.csv`: bang cac chi so quan trong kem cach doc nhanh
-- `reports/improved_threshold_search.csv`: ket qua quet threshold cho tung model
-- `reports/improved_best_val_predictions.csv`: prediction cua model tot nhat tren validation
-- `reports/improved_summary.json`: tom tat model, threshold, tham so tuning
-- `reports/improved_report.md`: bao cao ngan gon kem bang so sanh va duong dan bieu do
-- `reports/figures/improved/`: bang key metrics, confusion matrix, ROC curve, precision-recall curve, feature importance, threshold search
+- `reports/improved/model_comparison.csv`: bang so sanh XGBoost goc va XGBoost tuned
+- `reports/improved/key_metrics.csv`: bang cac chi so quan trong kem cach doc nhanh
+- `reports/improved/threshold_search.csv`: ket qua quet threshold cho tung model
+- `reports/improved/best_val_predictions.csv`: prediction cua model tot nhat tren validation
+- `reports/improved/test_metrics.json`: metrics tren tap test cua model tot nhat neu config co `x_test_path`/`y_test_path`
+- `reports/improved/best_test_predictions.csv`: prediction tren tap test cua model tot nhat
+- `reports/improved/summary.json`: tom tat model, threshold, tham so tuning
+- `reports/improved/report.md`: bao cao ngan gon kem bang so sanh va duong dan bieu do
+- `reports/improved/figures/`: bang key metrics, confusion matrix, ROC curve, precision-recall curve, feature importance, threshold search
 - `models/improved_best_model.joblib`: model tot nhat kem threshold da chon
+
+## Logistic Regression regularized
+
+Chay baseline tuyen tinh de so sanh voi XGBoost va xem huong tac dong cua tung feature:
+
+```powershell
+python -m src.train_logistic_regression --config configs/xgboost_basic.yaml --cv 5
+```
+
+Pipeline se tao:
+
+- `reports/logistic/report.md`: bao cao ngan gon cua Logistic Regression
+- `reports/logistic/model_comparison.csv`: so sanh L2 thuong va L2 `class_weight=balanced`
+- `reports/logistic/coefficients.csv`: he so cua tung feature de giai thich model
+- `reports/logistic/best_val_predictions.csv`: prediction tren validation cua model Logistic tot nhat
+- `reports/logistic/best_test_predictions.csv`: prediction tren test cua model Logistic tot nhat
+- `reports/logistic/test_metrics.json`: metrics tren tap test
+- `reports/logistic/figures/`: confusion matrix, ROC curve, precision-recall curve, coefficient magnitude
+- `models/logistic_regression_best_model.joblib`: Logistic Regression tot nhat kem threshold da chon
+
+## Cau truc bao cao
+
+```text
+reports/
+  base/
+    validation_metrics.json
+    validation_predictions.csv
+    test_metrics.json
+    test_predictions.csv
+    figures/
+      test/
+  improved/
+    report.md
+    summary.json
+    model_comparison.csv
+    key_metrics.csv
+    threshold_search.csv
+    best_val_predictions.csv
+    test_metrics.json
+    best_test_predictions.csv
+    figures/
+      test/
+  logistic/
+    report.md
+    summary.json
+    model_comparison.csv
+    coefficients.csv
+    best_val_predictions.csv
+    best_test_predictions.csv
+    test_metrics.json
+    figures/
+      test/
+```
 
 ## Dung voi bo du lieu khac
 
@@ -61,13 +116,15 @@ data:
   y_train_path: data/y_train_final.csv
   x_val_path: data/X_val.csv
   y_val_path: data/y_val.csv
+  x_test_path: data/X_test_final.csv
+  y_test_path: data/y_test_final.csv
   target_column: readmitted_30d
 ```
 
 Yeu cau quan trong:
 
-- File `X_train` va `X_val` phai co cung ten cot feature.
-- File `y_train` va `y_val` phai co cot target dung voi `target_column`.
+- File `X_train`, `X_val` va `X_test` phai co cung ten cot feature.
+- File `y_train`, `y_val` va `y_test` phai co cot target dung voi `target_column`.
 - Neu bo du lieu moi co feature khac, can train lai model.
 - Neu chi muon du doan tren du lieu moi, file CSV dau vao phai co du cac cot feature giong luc train.
 

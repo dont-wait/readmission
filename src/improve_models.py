@@ -18,9 +18,10 @@ from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from xgboost import XGBClassifier
 
 from src.config import load_config
-from src.data import load_train_validation_data
+from src.data import load_test_data, load_train_validation_data
 from src.visualization.plots import (
     format_metric_value,
+    save_basic_evaluation_plots,
     save_improvement_plots,
     save_key_metrics_plot,
 )
@@ -279,6 +280,7 @@ def save_markdown_report(
     output_path: Path,
 ) -> None:
     metrics = summary["best_model_metrics"]
+    test_metrics = summary.get("test_metrics")
     table_columns = [
         "model",
         "roc_auc",
@@ -311,6 +313,24 @@ def save_markdown_report(
         f"- Precision at best threshold: `{metrics['precision_at_best_threshold']:.4f}`",
         f"- Recall at best threshold: `{metrics['recall_at_best_threshold']:.4f}`",
         f"- F1 at best threshold: `{metrics['f1_at_best_threshold']:.4f}`",
+        "",
+        "## Test Set Metrics",
+        "",
+        *(
+            [
+                f"- Threshold: `{test_metrics['threshold']:.2f}`",
+                f"- Accuracy: `{test_metrics['accuracy']:.4f}`",
+                f"- Precision: `{test_metrics['precision']:.4f}`",
+                f"- Recall: `{test_metrics['recall']:.4f}`",
+                f"- F1: `{test_metrics['f1']:.4f}`",
+                f"- ROC AUC: `{test_metrics['roc_auc']:.4f}`",
+                f"- Average precision: `{test_metrics['average_precision']:.4f}`",
+                f"- Confusion matrix: TP `{test_metrics['tp']}`, FP `{test_metrics['fp']}`, "
+                f"FN `{test_metrics['fn']}`, TN `{test_metrics['tn']}`",
+            ]
+            if test_metrics
+            else ["- Test set is not configured."]
+        ),
         "",
         "## How To Read The Main Metrics",
         "",
@@ -361,14 +381,21 @@ def save_markdown_report(
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def build_output_filename(prefix: str, filename: str) -> str:
+    if not prefix:
+        return filename
+    return f"{prefix}_{filename}"
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
     x_train, y_train, x_val, y_val = load_train_validation_data(config)
 
     output_config = config["outputs"]
-    report_dir = Path(output_config["report_dir"])
+    report_dir = Path(output_config.get("improved_report_dir", output_config["report_dir"]))
     model_dir = Path(output_config["model_dir"])
+    output_prefix = str(output_config.get("improved_output_prefix", args.output_prefix))
     report_dir.mkdir(parents=True, exist_ok=True)
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -428,14 +455,14 @@ def main() -> None:
     best_validation_features = model_validation_features[best_model_name]
     best_training_features = model_training_features[best_model_name]
 
-    comparison_path = report_dir / f"{args.output_prefix}_model_comparison.csv"
-    thresholds_path = report_dir / f"{args.output_prefix}_threshold_search.csv"
-    predictions_path = report_dir / f"{args.output_prefix}_best_val_predictions.csv"
-    key_metrics_path = report_dir / f"{args.output_prefix}_key_metrics.csv"
-    summary_path = report_dir / f"{args.output_prefix}_summary.json"
-    report_path = report_dir / f"{args.output_prefix}_report.md"
-    model_path = model_dir / f"{args.output_prefix}_best_model.joblib"
-    plot_dir = Path(output_config.get("plot_dir", report_dir / "figures")) / args.output_prefix
+    comparison_path = report_dir / build_output_filename(output_prefix, "model_comparison.csv")
+    thresholds_path = report_dir / build_output_filename(output_prefix, "threshold_search.csv")
+    predictions_path = report_dir / build_output_filename(output_prefix, "best_val_predictions.csv")
+    key_metrics_path = report_dir / build_output_filename(output_prefix, "key_metrics.csv")
+    summary_path = report_dir / build_output_filename(output_prefix, "summary.json")
+    report_path = report_dir / build_output_filename(output_prefix, "report.md")
+    model_path = model_dir / build_output_filename(args.output_prefix, "best_model.joblib")
+    plot_dir = Path(output_config.get("improved_plot_dir", report_dir / "figures"))
     key_metrics_plot_path = plot_dir / "key_metrics_table.png"
 
     comparison.to_csv(comparison_path, index=False)
@@ -466,12 +493,48 @@ def main() -> None:
     if key_metrics_plot_path.exists():
         plot_paths["key_metrics_table"] = str(key_metrics_plot_path)
 
+    test_metrics = None
+    test_predictions_path = None
+    test_metrics_path = None
+    test_plot_paths: dict[str, str] = {}
+    test_data = load_test_data(config, list(best_training_features.columns))
+    if test_data is not None:
+        x_test, y_test = test_data
+        test_probabilities = pd.Series(
+            best_model.predict_proba(x_test)[:, 1],
+            name="predicted_probability",
+        )
+        test_metrics = evaluate_predictions(y_test, test_probabilities, best_threshold)
+        test_predictions_path = report_dir / build_output_filename(
+            output_prefix,
+            "best_test_predictions.csv",
+        )
+        test_metrics_path = report_dir / build_output_filename(output_prefix, "test_metrics.json")
+        pd.DataFrame(
+            {
+                "actual": y_test,
+                "predicted_probability": test_probabilities,
+                "predicted_label": (test_probabilities >= best_threshold).astype(int),
+            }
+        ).to_csv(test_predictions_path, index=False)
+        with test_metrics_path.open("w", encoding="utf-8") as file:
+            json.dump(test_metrics, file, indent=2)
+        test_plot_paths = save_basic_evaluation_plots(
+            best_model,
+            x_test,
+            y_test,
+            test_probabilities,
+            best_threshold,
+            plot_dir / "test",
+        )
+
     summary = {
         "scale_pos_weight": scale_pos_weight,
         "threshold_metric": args.threshold_metric,
         "best_model": best_model_name,
         "best_threshold": best_threshold,
         "best_model_metrics": comparison.iloc[0].to_dict(),
+        "test_metrics": test_metrics,
         "tuned_xgboost_best_cv_average_precision": float(tuned_search.best_score_),
         "tuned_xgboost_best_params": tuned_search.best_params_,
         "uses_original_filtered_features_only": True,
@@ -484,10 +547,13 @@ def main() -> None:
             "key_metrics": str(key_metrics_path),
             "thresholds": str(thresholds_path),
             "predictions": str(predictions_path),
+            "test_predictions": str(test_predictions_path) if test_predictions_path else None,
+            "test_metrics": str(test_metrics_path) if test_metrics_path else None,
             "summary": str(summary_path),
             "report": str(report_path),
             "model": str(model_path),
             "plots": plot_paths,
+            "test_plots": test_plot_paths,
         },
     }
     with summary_path.open("w", encoding="utf-8") as file:
@@ -517,6 +583,10 @@ def main() -> None:
     print(f"Summary saved to: {summary_path}")
     print(f"Markdown report saved to: {report_path}")
     print(f"Plots saved to: {plot_dir}")
+    if test_metrics_path and test_predictions_path:
+        print(f"Test metrics saved to: {test_metrics_path}")
+        print(f"Best test predictions saved to: {test_predictions_path}")
+        print(f"Test plots saved to: {plot_dir / 'test'}")
     print(f"Best model saved to: {model_path}")
     for plot_name, plot_path in plot_paths.items():
         print(f"- {plot_name}: {plot_path}")

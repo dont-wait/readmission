@@ -261,6 +261,7 @@ def save_basic_evaluation_plots(
     y_probability: pd.Series,
     threshold: float,
     plot_dir: Path,
+    feature_importance_title: str = "Feature Importance",
 ) -> dict[str, str]:
     plot_dir.mkdir(parents=True, exist_ok=True)
     plot_paths = {
@@ -277,7 +278,7 @@ def save_basic_evaluation_plots(
         model,
         list(x_val.columns),
         plot_paths["feature_importance"],
-        title="XGBoost Feature Importance",
+        title=feature_importance_title,
     )
 
     return {name: str(path) for name, path in plot_paths.items()}

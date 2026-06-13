@@ -3,6 +3,8 @@ data:
   y_train_path: data/y_train_final.csv
   x_val_path: data/X_val.csv
   y_val_path: data/y_val.csv
+  x_test_path: data/X_test_final.csv
+  y_test_path: data/y_test_final.csv
   target_column: readmitted_30d
 
 model:
@@ -28,8 +30,15 @@ training:
 
 outputs:
   model_dir: models
-  report_dir: reports
-  plot_dir: reports/figures
+  report_dir: reports/base
+  plot_dir: reports/base/figures
+  improved_report_dir: reports/improved
+  improved_plot_dir: reports/improved/figures
+  improved_output_prefix: ""
+  logistic_report_dir: reports/logistic
+  logistic_plot_dir: reports/logistic/figures
   model_filename: xgboost_basic.joblib
-  metrics_filename: xgboost_basic_metrics.json
-  predictions_filename: xgboost_basic_val_predictions.csv
+  metrics_filename: validation_metrics.json
+  predictions_filename: validation_predictions.csv
+  test_metrics_filename: test_metrics.json
+  test_predictions_filename: test_predictions.csv
